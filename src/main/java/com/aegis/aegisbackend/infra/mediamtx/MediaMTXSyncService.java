@@ -2,6 +2,7 @@ package com.aegis.aegisbackend.infra.mediamtx;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
+import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
  * - Webhook 수신 시 카메라 목록 동기화
  * - 새 카메라는 비활성화 상태로 추가
  * - 연결 해제된 카메라는 오프라인 처리
+ * - 동기화 완료 시 SSE로 프론트엔드에 알림
  */
 @Slf4j
 @Service
@@ -30,6 +32,7 @@ public class MediaMTXSyncService {
     private final CameraRepository cameraRepository;
     private final RedisTokenService redisTokenService;
     private final WebClient.Builder webClientBuilder;
+    private final SseEmitterService sseEmitterService;
 
     @Value("${mediamtx.api-url}")
     private String mediaMtxApiUrl;
@@ -59,6 +62,8 @@ public class MediaMTXSyncService {
     public void syncCameras() {
         log.info("카메라 동기화 시작");
 
+        boolean hasChanges = false;
+
         try {
             List<String> mtxCameras = fetchCamerasFromMediaMTX();
             Set<String> mtxCameraSet = Set.copyOf(mtxCameras);
@@ -79,6 +84,7 @@ public class MediaMTXSyncService {
                             .build();
                     cameraRepository.save(camera);
                     log.info("새 카메라 추가: {}", name);
+                    hasChanges = true;
                 }
             }
 
@@ -89,10 +95,18 @@ public class MediaMTXSyncService {
                     camera.setConnected(connected);
                     cameraRepository.save(camera);
                     log.info("카메라 연결 상태 변경: {} -> {}", camera.getName(), connected);
+                    hasChanges = true;
                 }
             }
 
             log.info("카메라 동기화 완료: MediaMTX={}, DB={}", mtxCameras.size(), dbCameras.size());
+
+            // 변경사항이 있으면 SSE로 프론트엔드에 카메라 목록 갱신 알림
+            if (hasChanges) {
+                sseEmitterService.broadcastCameraListRefresh();
+                log.info("카메라 목록 갱신 SSE 브로드캐스트 전송");
+            }
+
         } catch (Exception e) {
             log.error("카메라 동기화 실패: {}", e.getMessage());
         }

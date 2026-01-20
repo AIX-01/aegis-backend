@@ -2,6 +2,7 @@ package com.aegis.aegisbackend.domain.camera.service;
 
 import com.aegis.aegisbackend.domain.camera.dto.CameraDto;
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
+import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.AegisException;
@@ -21,6 +22,7 @@ import java.util.UUID;
  * 카메라 서비스
  * - 카메라 목록 조회 (권한에 따라)
  * - 카메라 정보 수정 (별칭, 활성화)
+ * - 카메라 변경 시 SSE로 실시간 알림
  */
 @Slf4j
 @Service
@@ -30,6 +32,7 @@ public class CameraService {
     private final CameraRepository cameraRepository;
     private final UserRepository userRepository;
     private final UserCameraRepository userCameraRepository;
+    private final SseEmitterService sseEmitterService;
 
     @Transactional(readOnly = true)
     public List<CameraDto> getAllCameras(UUID userId) {
@@ -64,7 +67,12 @@ public class CameraService {
 
         cameraRepository.save(camera);
         log.info("카메라 수정: {}", cameraId);
-        return toDto(camera);
+
+        // SSE로 카메라 업데이트 브로드캐스트
+        CameraDto updatedDto = toDto(camera);
+        sseEmitterService.broadcastCameraUpdate(updatedDto);
+
+        return updatedDto;
     }
 
     @Transactional(readOnly = true)
