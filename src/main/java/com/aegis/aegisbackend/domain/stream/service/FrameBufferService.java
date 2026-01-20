@@ -1,18 +1,24 @@
 package com.aegis.aegisbackend.domain.stream.service;
 
+import com.aegis.aegisbackend.infra.agent.AgentService;
+import com.aegis.aegisbackend.infra.vlm.VlmService;
+import com.aegis.aegisbackend.infra.vlm.dto.VlmAnalysisResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 프레임 버퍼 서비스
  * - 썸네일: Redis 저장 (카메라당 최신 1장, 5초 TTL)
  * - VLM 버퍼: 메모리 저장 (카메라당 8장 수집 후 분석)
+ * - 8장 모이면 VLM 분석 후 위험 시 Agent 조치 요청
  */
 @Slf4j
 @Service
@@ -20,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 public class FrameBufferService {
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final VlmService vlmService;
+    private final AgentService agentService;
 
     private static final String THUMBNAIL_PREFIX = "thumbnail:";
     private static final int THUMBNAIL_TTL_SECONDS = 5;
@@ -30,7 +38,14 @@ public class FrameBufferService {
     /** 프레임 수신 처리: 썸네일 저장 + VLM 버퍼 추가 */
     public List<byte[]> processFrame(UUID cameraId, byte[] frameData) {
         saveThumbnail(cameraId, frameData);
-        return addToVlmBuffer(cameraId, frameData);
+        List<byte[]> fullBuffer = addToVlmBuffer(cameraId, frameData);
+
+        // 버퍼가 가득 차면 비동기로 VLM 분석 수행
+        if (fullBuffer != null) {
+            analyzeFramesAsync(cameraId, fullBuffer);
+        }
+
+        return fullBuffer;
     }
 
     /** Redis에서 썸네일 조회 (Base64) */
@@ -79,5 +94,35 @@ public class FrameBufferService {
             }
         }
         return null;
+    }
+
+    /**
+     * VLM 분석 비동기 수행
+     * - 8장 프레임을 VLM에 전송하여 분석
+     * - 위험 상황 감지 시 Agent 조치 요청
+     */
+    @Async
+    public void analyzeFramesAsync(UUID cameraId, List<byte[]> frames) {
+        try {
+            // 프레임을 Base64로 변환
+            List<String> base64Frames = frames.stream()
+                    .map(Base64.getEncoder()::encodeToString)
+                    .collect(Collectors.toList());
+
+            // VLM 분석 요청
+            VlmAnalysisResponse analysisResult = vlmService.analyzeFrames(cameraId, base64Frames);
+
+            // 위험 상황 감지 시 Agent 조치 요청
+            if (analysisResult.isDangerous()) {
+                log.warn("위험 상황 감지: cameraId={}, type={}, confidence={}",
+                        cameraId, analysisResult.getEventType(), analysisResult.getConfidence());
+
+                // TODO: 이벤트 생성 후 Agent 조치 요청
+                // UUID eventId = eventService.createEvent(...);
+                // agentService.requestAction(cameraId, eventId, analysisResult);
+            }
+        } catch (Exception e) {
+            log.error("VLM 분석 실패: cameraId={}", cameraId, e);
+        }
     }
 }
