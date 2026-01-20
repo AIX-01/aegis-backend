@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 설정 API
+ * - 비상연락처 관리
+ */
 @RestController
 @RequestMapping("/api/settings")
 @RequiredArgsConstructor

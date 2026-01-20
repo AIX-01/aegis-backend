@@ -11,6 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 사용자 관리 API (관리자 전용)
+ * - 사용자 목록 조회, 승인, 카메라 할당
+ */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor

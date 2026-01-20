@@ -13,6 +13,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 통계 API
+ * - 이벤트 통계, 카메라 현황, 스토리지 사용량
+ */
 @RestController
 @RequestMapping("/api/stats")
 @RequiredArgsConstructor

@@ -11,15 +11,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * 카메라 레포지토리
+ */
 @Repository
 public interface CameraRepository extends JpaRepository<Camera, UUID> {
 
+    /** 스트림 경로명으로 조회 */
     Optional<Camera> findByName(String name);
 
     boolean existsByName(String name);
 
+    /** 연결 상태별 조회 */
     List<Camera> findByConnected(boolean connected);
 
+    /** 활성화 상태별 조회 */
     List<Camera> findByActive(boolean active);
 
     List<Camera> findByConnectedAndActive(boolean connected, boolean active);

@@ -13,6 +13,11 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * 사용자 엔티티
+ * - 관리자(ADMIN) / 일반 사용자(USER) 구분
+ * - 회원가입 후 관리자 승인 필요
+ */
 @Entity
 @Table(name = "users", indexes = {
         @Index(name = "idx_users_email", columnList = "email"),
@@ -29,20 +34,25 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** 로그인 이메일 (고유) */
     @Column(nullable = false, unique = true, length = 255)
     private String email;
 
+    /** 암호화된 비밀번호 */
     @Column(nullable = false, length = 255)
     private String password;
 
+    /** 사용자 이름 */
     @Column(nullable = false, length = 100)
     private String name;
 
+    /** 사용자 권한 (ADMIN/USER) */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     @Builder.Default
     private UserRole role = UserRole.USER;
 
+    /** 관리자 승인 여부 */
     @Column(nullable = false)
     @Builder.Default
     private Boolean approved = false;

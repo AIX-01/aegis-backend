@@ -11,6 +11,10 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * 카메라 엔티티
+ * - MediaMTX에서 동기화된 CCTV 카메라 정보
+ */
 @Entity
 @Table(name = "cameras", indexes = {
         @Index(name = "idx_cameras_connected", columnList = "connected"),
@@ -27,16 +31,20 @@ public class Camera {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** MediaMTX 스트림 경로명 (예: cam1) */
     @Column(nullable = false, length = 50)
     private String name;
 
+    /** 연결 상태 (MediaMTX에서 스트림 수신 여부) */
     @Column(nullable = false)
     @Builder.Default
     private Boolean connected = false;
 
+    /** 사용자 지정 별칭 */
     @Column(nullable = false, length = 100)
     private String alias;
 
+    /** 모니터링 활성화 여부 */
     @Column(nullable = false)
     @Builder.Default
     private Boolean active = false;

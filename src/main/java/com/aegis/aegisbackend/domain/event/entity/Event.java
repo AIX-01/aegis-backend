@@ -14,6 +14,11 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * 이벤트 엔티티
+ * - VLM 분석으로 감지된 위험/이상 상황 기록
+ * - 폭행, 절도, 의심, 정상 등 유형 구분
+ */
 @Entity
 @Table(name = "events", indexes = {
         @Index(name = "idx_events_camera_id", columnList = "camera_id"),
@@ -32,10 +37,12 @@ public class Event {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** 이벤트 발생 카메라 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "camera_id", nullable = false)
     private Camera camera;
 
+    /** 이벤트 유형 (ASSAULT/THEFT/SUSPICIOUS/NORMAL) */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EventType type;

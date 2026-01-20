@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 알림 API
+ * - 사용자별 알림 조회 및 읽음 처리
+ */
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor

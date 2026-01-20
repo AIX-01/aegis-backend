@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * 이벤트 API
+ * - 위험/이상 상황 이벤트 조회 및 관리
+ */
 @RestController
 @RequestMapping("/api/events")
 @RequiredArgsConstructor
