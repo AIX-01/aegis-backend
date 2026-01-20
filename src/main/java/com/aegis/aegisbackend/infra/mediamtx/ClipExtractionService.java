@@ -12,24 +12,24 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 클립 추출 서비스
- * - MediaMTX HLS 녹화 파일(.ts)을 가져와서 하나로 합침
- * - MinIO에 클립 저장 후 이벤트에 URL 업데이트
+ * - MediaMTX HLS API를 통해 HTTP로 세그먼트 다운로드
+ * - FFmpeg로 MP4 변환 후 MinIO에 저장
  */
 @Slf4j
 @Service
@@ -39,9 +39,10 @@ public class ClipExtractionService {
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
     private final S3Service s3Service;
+    private final WebClient.Builder webClientBuilder;
 
-    @Value("${mediamtx.recordings-dir:/recordings}")
-    private String recordingsDir;
+    @Value("${mediamtx.hls-url:http://localhost:8888}")
+    private String hlsBaseUrl;
 
     @Value("${clip.extraction.temp-dir:/tmp/aegis-clips}")
     private String tempDir;
@@ -49,9 +50,12 @@ public class ClipExtractionService {
     @Value("${clip.extraction.segment-count:10}")
     private int defaultSegmentCount;
 
+    // HLS 플레이리스트에서 세그먼트 파일명 추출용 패턴
+    private static final Pattern SEGMENT_PATTERN = Pattern.compile("^([^#].+\\.ts)$", Pattern.MULTILINE);
+
     /**
      * 이벤트 클립 추출 (비동기)
-     * - HLS 세그먼트 파일들을 합쳐서 클립 생성
+     * - HLS 세그먼트 파일들을 HTTP로 다운로드하여 클립 생성
      * - MinIO에 저장 후 이벤트 clipUrl 업데이트
      */
     @Async
@@ -91,7 +95,7 @@ public class ClipExtractionService {
 
     /**
      * 이벤트 클립 추출 (동기)
-     * - 카메라의 HLS 녹화 디렉토리에서 .ts 파일들을 가져옴
+     * - MediaMTX HLS API에서 m3u8 파싱 후 세그먼트 다운로드
      * - FFmpeg로 하나의 MP4로 합침
      * - MinIO에 업로드
      */
@@ -100,27 +104,26 @@ public class ClipExtractionService {
                 .orElseThrow(() -> new RuntimeException("카메라를 찾을 수 없습니다: " + cameraId));
 
         String cameraName = camera.getName();
-        Path hlsDir = Path.of(recordingsDir, cameraName);
-        Path tempDirPath = Path.of(tempDir);
+        Path tempDirPath = Path.of(tempDir, eventId.toString());
 
         try {
             // 임시 디렉토리 생성
             Files.createDirectories(tempDirPath);
 
-            // HLS 세그먼트 파일 목록 가져오기 (최신 N개)
-            List<File> segmentFiles = getLatestSegments(hlsDir, segmentCount);
+            // HLS 세그먼트 다운로드 (HTTP)
+            List<Path> segmentFiles = downloadHlsSegments(cameraName, tempDirPath, segmentCount);
             if (segmentFiles.isEmpty()) {
-                throw new RuntimeException("HLS 세그먼트 파일을 찾을 수 없습니다: " + hlsDir);
+                throw new RuntimeException("HLS 세그먼트를 다운로드할 수 없습니다: " + cameraName);
             }
 
             log.info("클립 추출 시작: camera={}, segments={}", cameraName, segmentFiles.size());
 
             // FFmpeg concat 리스트 파일 생성
-            Path concatListPath = tempDirPath.resolve(eventId + "_concat.txt");
+            Path concatListPath = tempDirPath.resolve("concat.txt");
             createConcatList(concatListPath, segmentFiles);
 
             // 출력 파일 경로
-            Path outputPath = tempDirPath.resolve(eventId + ".mp4");
+            Path outputPath = tempDirPath.resolve("clip.mp4");
 
             // FFmpeg로 세그먼트 합치기
             boolean success = mergeSegmentsWithFFmpeg(concatListPath, outputPath);
@@ -142,41 +145,95 @@ public class ClipExtractionService {
             throw new RuntimeException("클립 추출 실패", e);
         } finally {
             // 임시 파일 정리
-            cleanupTempFiles(eventId);
+            cleanupTempFiles(tempDirPath);
         }
     }
 
     /**
-     * 최신 HLS 세그먼트 파일 가져오기
+     * MediaMTX HLS API에서 세그먼트 다운로드 (HTTP)
      */
-    private List<File> getLatestSegments(Path hlsDir, int count) {
-        File dir = hlsDir.toFile();
-        if (!dir.exists() || !dir.isDirectory()) {
-            log.warn("HLS 디렉토리가 존재하지 않음: {}", hlsDir);
-            return List.of();
+    private List<Path> downloadHlsSegments(String cameraName, Path tempDirPath, int segmentCount) {
+        List<Path> downloadedFiles = new ArrayList<>();
+        WebClient client = webClientBuilder.build();
+
+        try {
+            // 1. m3u8 플레이리스트 가져오기
+            String playlistUrl = hlsBaseUrl + "/" + cameraName + "/index.m3u8";
+            String playlist = client.get()
+                    .uri(playlistUrl)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            if (playlist == null || playlist.isEmpty()) {
+                log.warn("HLS 플레이리스트가 비어있음: {}", playlistUrl);
+                return downloadedFiles;
+            }
+
+            // 2. 세그먼트 파일명 추출
+            List<String> segmentNames = parseSegmentNames(playlist);
+            if (segmentNames.isEmpty()) {
+                log.warn("HLS 플레이리스트에서 세그먼트를 찾을 수 없음: {}", playlistUrl);
+                return downloadedFiles;
+            }
+
+            // 3. 최신 N개 세그먼트만 선택
+            int startIndex = Math.max(0, segmentNames.size() - segmentCount);
+            List<String> targetSegments = segmentNames.subList(startIndex, segmentNames.size());
+
+            log.debug("세그먼트 다운로드 대상: {} / {} 개", targetSegments.size(), segmentNames.size());
+
+            // 4. 각 세그먼트 다운로드
+            for (int i = 0; i < targetSegments.size(); i++) {
+                String segmentName = targetSegments.get(i);
+                String segmentUrl = hlsBaseUrl + "/" + cameraName + "/" + segmentName;
+
+                try {
+                    byte[] segmentData = client.get()
+                            .uri(segmentUrl)
+                            .retrieve()
+                            .bodyToMono(byte[].class)
+                            .block();
+
+                    if (segmentData != null && segmentData.length > 0) {
+                        // 순서 보장을 위해 번호 붙여서 저장
+                        Path segmentPath = tempDirPath.resolve(String.format("%03d_%s", i, segmentName));
+                        Files.write(segmentPath, segmentData);
+                        downloadedFiles.add(segmentPath);
+                        log.debug("세그먼트 다운로드 완료: {}", segmentName);
+                    }
+                } catch (Exception e) {
+                    log.warn("세그먼트 다운로드 실패: {}, error={}", segmentUrl, e.getMessage());
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("HLS 세그먼트 다운로드 실패: camera={}, error={}", cameraName, e.getMessage());
         }
 
-        File[] tsFiles = dir.listFiles((d, name) -> name.endsWith(".ts"));
-        if (tsFiles == null || tsFiles.length == 0) {
-            log.warn("HLS 세그먼트 파일이 없음: {}", hlsDir);
-            return List.of();
-        }
+        return downloadedFiles;
+    }
 
-        // 파일명 또는 수정 시간으로 정렬하여 최신 N개 선택
-        return Arrays.stream(tsFiles)
-                .sorted(Comparator.comparingLong(File::lastModified))
-                .skip(Math.max(0, tsFiles.length - count))
-                .collect(Collectors.toList());
+    /**
+     * m3u8 플레이리스트에서 세그먼트 파일명 추출
+     */
+    private List<String> parseSegmentNames(String playlist) {
+        List<String> segments = new ArrayList<>();
+        Matcher matcher = SEGMENT_PATTERN.matcher(playlist);
+        while (matcher.find()) {
+            segments.add(matcher.group(1));
+        }
+        return segments;
     }
 
     /**
      * FFmpeg concat demuxer용 리스트 파일 생성
      */
-    private void createConcatList(Path listPath, List<File> segmentFiles) throws Exception {
+    private void createConcatList(Path listPath, List<Path> segmentFiles) throws Exception {
         try (FileWriter writer = new FileWriter(listPath.toFile())) {
-            for (File segment : segmentFiles) {
+            for (Path segment : segmentFiles) {
                 // FFmpeg concat demuxer 형식: file '/path/to/file.ts'
-                writer.write("file '" + segment.getAbsolutePath() + "'\n");
+                writer.write("file '" + segment.toAbsolutePath() + "'\n");
             }
         }
         log.debug("Concat 리스트 생성: {}, files={}", listPath, segmentFiles.size());
@@ -187,10 +244,6 @@ public class ClipExtractionService {
      */
     private boolean mergeSegmentsWithFFmpeg(Path concatListPath, Path outputPath) {
         try {
-            // FFmpeg concat demuxer 사용
-            // -f concat: concat demuxer 사용
-            // -safe 0: 절대 경로 허용
-            // -c copy: 재인코딩 없이 복사 (빠름)
             ProcessBuilder pb = new ProcessBuilder(
                     "ffmpeg",
                     "-f", "concat",
@@ -228,8 +281,7 @@ public class ClipExtractionService {
             }
 
             // 파일 생성 확인
-            File outputFile = outputPath.toFile();
-            if (!outputFile.exists() || outputFile.length() == 0) {
+            if (!Files.exists(outputPath) || Files.size(outputPath) == 0) {
                 log.error("클립 파일 생성 실패: {}", outputPath);
                 return false;
             }
@@ -244,18 +296,23 @@ public class ClipExtractionService {
     }
 
     /**
-     * 임시 파일 정리
+     * 임시 디렉토리 및 파일 정리
      */
-    private void cleanupTempFiles(UUID eventId) {
+    private void cleanupTempFiles(Path tempDirPath) {
         try {
-            Path tempDirPath = Path.of(tempDir);
-            Path concatListPath = tempDirPath.resolve(eventId + "_concat.txt");
-            Path outputPath = tempDirPath.resolve(eventId + ".mp4");
-
-            Files.deleteIfExists(concatListPath);
-            Files.deleteIfExists(outputPath);
+            if (Files.exists(tempDirPath)) {
+                Files.walk(tempDirPath)
+                        .sorted((a, b) -> -a.compareTo(b))  // 역순 정렬 (파일 먼저, 디렉토리 나중에)
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                            } catch (Exception e) {
+                                log.warn("임시 파일 삭제 실패: {}", path);
+                            }
+                        });
+            }
         } catch (Exception e) {
-            log.warn("임시 파일 정리 실패: eventId={}", eventId);
+            log.warn("임시 디렉토리 정리 실패: {}", tempDirPath);
         }
     }
 }

@@ -123,6 +123,40 @@ public class SseEmitterService {
     }
 
     /**
+     * 카메라 업데이트 이벤트 브로드캐스트 (모든 연결된 사용자에게 전송)
+     */
+    public void broadcastCameraUpdate(Object cameraData) {
+        log.debug("카메라 업데이트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("camera-update")
+                        .data(cameraData));
+            } catch (IOException e) {
+                log.warn("카메라 업데이트 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
+     * 카메라 목록 전체 갱신 이벤트 브로드캐스트
+     */
+    public void broadcastCameraListRefresh() {
+        log.debug("카메라 목록 갱신 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("camera-refresh")
+                        .data("refresh"));
+            } catch (IOException e) {
+                log.warn("카메라 갱신 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
      * 현재 연결된 사용자 수
      */
     public int getConnectedUserCount() {
