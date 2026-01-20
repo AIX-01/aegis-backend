@@ -17,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -78,10 +77,7 @@ public class WebhookController {
             return ResponseEntity.ok(Map.of("processed", false, "reason", "inactive"));
         }
 
-        List<byte[]> aiFrames = frameBufferService.processFrame(camera.getId(), frameData);
-        if (aiFrames != null) {
-            log.info("AI 분석 트리거: camera={}, frames={}", cameraName, aiFrames.size());
-        }
+        frameBufferService.processFrame(camera.getId(), frameData);
 
         return ResponseEntity.ok(Map.of("processed", true));
     }
