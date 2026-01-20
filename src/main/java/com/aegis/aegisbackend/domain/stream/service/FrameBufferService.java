@@ -1,6 +1,8 @@
 package com.aegis.aegisbackend.domain.stream.service;
 
-import com.aegis.aegisbackend.infra.agent.AgentService;
+import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.service.EventService;
+import com.aegis.aegisbackend.infra.mediamtx.ClipExtractionService;
 import com.aegis.aegisbackend.infra.vlm.VlmService;
 import com.aegis.aegisbackend.infra.vlm.dto.VlmAnalysisResponse;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +20,7 @@ import java.util.stream.Collectors;
  * 프레임 버퍼 서비스
  * - 썸네일: Redis 저장 (카메라당 최신 1장, 5초 TTL)
  * - VLM 버퍼: 메모리 저장 (카메라당 8장 수집 후 분석)
- * - 8장 모이면 VLM 분석 후 위험 시 Agent 조치 요청
+ * - 위험 감지 시 이벤트 생성 + 클립 추출
  */
 @Slf4j
 @Service
@@ -27,7 +29,8 @@ public class FrameBufferService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final VlmService vlmService;
-    private final AgentService agentService;
+    private final EventService eventService;
+    private final ClipExtractionService clipExtractionService;
 
     private static final String THUMBNAIL_PREFIX = "thumbnail:";
     private static final int THUMBNAIL_TTL_SECONDS = 5;
@@ -99,7 +102,7 @@ public class FrameBufferService {
     /**
      * VLM 분석 비동기 수행
      * - 8장 프레임을 VLM에 전송하여 분석
-     * - 위험 상황 감지 시 Agent 조치 요청
+     * - 위험 상황 감지 시 이벤트 생성 + 클립 추출
      */
     @Async
     public void analyzeFramesAsync(UUID cameraId, List<byte[]> frames) {
@@ -112,14 +115,25 @@ public class FrameBufferService {
             // VLM 분석 요청
             VlmAnalysisResponse analysisResult = vlmService.analyzeFrames(cameraId, base64Frames);
 
-            // 위험 상황 감지 시 Agent 조치 요청
+            // 위험 상황 감지 시 이벤트 생성 + 클립 추출
             if (analysisResult.isDangerous()) {
                 log.warn("위험 상황 감지: cameraId={}, type={}, confidence={}",
                         cameraId, analysisResult.getEventType(), analysisResult.getConfidence());
 
-                // TODO: 이벤트 생성 후 Agent 조치 요청
-                // UUID eventId = eventService.createEvent(...);
-                // agentService.requestAction(cameraId, eventId, analysisResult);
+                // 1. 이벤트 생성
+                Event event = eventService.createEventFromVlm(
+                        cameraId,
+                        analysisResult.getEventType(),
+                        analysisResult.getDescription(),
+                        analysisResult.getRecommendedAction(),
+                        analysisResult.getSummary(),
+                        analysisResult.getAnalysisReport()
+                );
+
+                // 2. 클립 추출 (비동기) - 추출 완료 후 이벤트에 clipUrl 업데이트
+                clipExtractionService.extractAndSaveClipAsync(cameraId, event.getId(), 10);
+
+                log.info("이벤트 생성 및 클립 추출 요청: eventId={}", event.getId());
             }
         } catch (Exception e) {
             log.error("VLM 분석 실패: cameraId={}", cameraId, e);

@@ -64,6 +64,51 @@ public class EventService {
         return toEventDto(event);
     }
 
+    /**
+     * VLM 분석 결과로 이벤트 생성
+     * - 클립 URL은 나중에 업데이트됨 (비동기 추출)
+     */
+    @Transactional
+    public Event createEventFromVlm(UUID cameraId, String eventType, String description,
+                                     String aiAction, String summary, String analysisReport) {
+        Camera camera = cameraRepository.findById(cameraId)
+                .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+
+        Event event = Event.builder()
+                .camera(camera)
+                .type(EventType.fromValue(eventType))
+                .timestamp(LocalDateTime.now())
+                .status(EventStatus.PROCESSING)
+                .description(description)
+                .aiAction(aiAction)
+                .summary(summary)
+                .analysisReport(analysisReport)
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        log.info("VLM 이벤트 생성: eventId={}, camera={}, type={}",
+                savedEvent.getId(), camera.getName(), eventType);
+
+        // 이벤트 발생 시 관련 사용자들에게 알림 생성
+        createNotificationsForEvent(savedEvent);
+
+        return savedEvent;
+    }
+
+    /**
+     * 이벤트에 클립 URL 업데이트
+     */
+    @Transactional
+    public void updateClipUrl(UUID eventId, String clipUrl) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new AegisException(ErrorCode.EVENT_NOT_FOUND));
+
+        event.setClipUrl(clipUrl);
+        event.setStatus(EventStatus.RESOLVED);
+        eventRepository.save(event);
+        log.info("이벤트 클립 업데이트: eventId={}, clipUrl={}", eventId, clipUrl);
+    }
+
     @Transactional
     public EventDto createEvent(EventDto.CreateRequest request) {
         Camera camera = cameraRepository.findById(UUID.fromString(request.getCameraId()))
