@@ -52,7 +52,7 @@ public class AuthService {
                 user.getRole().name()
         );
 
-        // 5. Refresh Token 생성 및 저장
+        // 5. Refresh Token 생성 및 Redis 저장
         String refreshToken = jwtTokenProvider.createRefreshToken();
         redisTokenService.saveRefreshToken(
                 refreshToken,
@@ -60,12 +60,6 @@ public class AuthService {
                 jwtTokenProvider.getRefreshExpiration()
         );
 
-        // 6. Access Token 저장
-        redisTokenService.saveAccessToken(
-                user.getId(),
-                accessToken,
-                jwtTokenProvider.getAccessExpiration()
-        );
 
         return LoginResponse.builder()
                 .accessToken(accessToken)
@@ -96,8 +90,7 @@ public class AuthService {
 
     @Transactional
     public void logout(UUID userId, String refreshToken) {
-        // Redis에서 토큰 삭제
-        redisTokenService.deleteAccessToken(userId);
+        // Redis에서 Refresh Token 삭제
         if (refreshToken != null) {
             redisTokenService.deleteRefreshToken(refreshToken);
         }
@@ -126,19 +119,13 @@ public class AuthService {
             throw new AegisException(ErrorCode.INVALID_USER);
         }
 
-        // 3. 새 Access Token 생성
+        // 3. 새 Access Token 생성 (JWT 서명으로 검증, Redis 저장 안 함)
         String newAccessToken = jwtTokenProvider.createAccessToken(
                 user.getId(),
                 user.getEmail(),
                 user.getRole().name()
         );
 
-        // 4. Access Token 저장
-        redisTokenService.saveAccessToken(
-                user.getId(),
-                newAccessToken,
-                jwtTokenProvider.getAccessExpiration()
-        );
 
         return RefreshResponse.builder()
                 .accessToken(newAccessToken)
