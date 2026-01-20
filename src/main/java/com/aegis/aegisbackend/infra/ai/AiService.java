@@ -30,6 +30,9 @@ public class AiService {
     @Value("${ai.enabled:false}")
     private boolean aiEnabled;
 
+    @Value("${ai.timeout-seconds:30}")
+    private int timeoutSeconds;
+
     /**
      * 프레임 버퍼를 AI 백엔드에 비동기 전송 (fire-and-forget)
      * - 8장의 프레임을 AI 백엔드에 전송
@@ -59,7 +62,7 @@ public class AiService {
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .subscribe(
                             response -> log.debug("AI 응답 수신: cameraId={}", cameraId),
                             error -> log.warn("AI 요청 실패: cameraId={}, error={}", cameraId, error.getMessage())
@@ -84,7 +87,7 @@ public class AiService {
                     .uri(aiApiUrl + "/health")
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .block();
 
             return response != null;
