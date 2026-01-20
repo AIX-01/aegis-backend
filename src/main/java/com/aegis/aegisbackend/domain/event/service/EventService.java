@@ -65,11 +65,11 @@ public class EventService {
     }
 
     /**
-     * VLM 분석 결과로 이벤트 생성
+     * Agent 분석 결과로 이벤트 생성
      * - 클립 URL은 나중에 업데이트됨 (비동기 추출)
      */
     @Transactional
-    public Event createEventFromVlm(UUID cameraId, String eventType, String description,
+    public Event createEventFromAgent(UUID cameraId, String eventType, String description,
                                      String aiAction, String summary, String analysisReport) {
         Camera camera = cameraRepository.findById(cameraId)
                 .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
@@ -86,7 +86,7 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        log.info("VLM 이벤트 생성: eventId={}, camera={}, type={}",
+        log.info("Agent 이벤트 생성: eventId={}, camera={}, type={}",
                 savedEvent.getId(), camera.getName(), eventType);
 
         // 이벤트 발생 시 관련 사용자들에게 알림 생성

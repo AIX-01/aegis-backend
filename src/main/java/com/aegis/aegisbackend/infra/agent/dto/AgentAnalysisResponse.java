@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.vlm.dto;
+package com.aegis.aegisbackend.infra.agent.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,13 +8,14 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 /**
- * VLM 분석 응답 DTO
+ * Agent 분석 응답 DTO
+ * - 영상 프레임 분석 결과
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VlmAnalysisResponse {
+public class AgentAnalysisResponse {
 
     /** 카메라 ID */
     private UUID cameraId;

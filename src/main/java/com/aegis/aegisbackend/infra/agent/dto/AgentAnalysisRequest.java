@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.vlm.dto;
+package com.aegis.aegisbackend.infra.agent.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,20 +9,18 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * VLM 분석 요청 DTO
+ * Agent 분석 요청 DTO
+ * - 영상 프레임 분석 요청
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VlmAnalysisRequest {
+public class AgentAnalysisRequest {
 
     /** 카메라 ID */
     private UUID cameraId;
 
     /** Base64 인코딩된 프레임 이미지 목록 */
     private List<String> frames;
-
-    /** 분석 타임스탬프 */
-    private String timestamp;
 }
