@@ -40,4 +40,12 @@ public class AuthDto {
     public static class RefreshResponse {
         private String accessToken;
     }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PasswordChangeRequest {
+        private String currentPassword;
+        private String newPassword;
+    }
 }

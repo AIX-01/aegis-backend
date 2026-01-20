@@ -92,6 +92,18 @@ public class AuthController {
         return ResponseEntity.ok(user);
     }
 
+    @PatchMapping("/password")
+    public ResponseEntity<Map<String, Object>> changePassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody PasswordChangeRequest request) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        authService.changePassword(userId, request);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "비밀번호가 변경되었습니다."
+        ));
+    }
+
     private String getRefreshTokenFromCookie(HttpServletRequest request) {
         if (request.getCookies() == null) {
             return null;

@@ -153,6 +153,29 @@ public class AuthService {
         return toUserDto(user);
     }
 
+    @Transactional
+    public void changePassword(UUID userId, PasswordChangeRequest request) {
+        // 1. 사용자 조회
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+
+        // 2. 현재 비밀번호 검증
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new AegisException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
+        }
+
+        // 3. 새 비밀번호 길이 검증
+        if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
+            throw new AegisException(ErrorCode.PASSWORD_TOO_SHORT);
+        }
+
+        // 4. 비밀번호 변경
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        log.info("Password changed for user: {}", userId);
+    }
+
     private UserDto toUserDto(User user) {
         List<String> assignedCameras;
 

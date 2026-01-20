@@ -17,6 +17,8 @@ public enum ErrorCode {
     INVALID_USER(HttpStatus.UNAUTHORIZED, "유효하지 않은 사용자입니다."),
     AUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "사용자를 찾을 수 없습니다."),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
+    PASSWORD_TOO_SHORT(HttpStatus.BAD_REQUEST, "새 비밀번호는 6자 이상이어야 합니다."),
 
     // User
     USER_ID_REQUIRED(HttpStatus.BAD_REQUEST, "사용자 ID가 필요합니다."),
