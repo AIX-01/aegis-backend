@@ -130,8 +130,8 @@ public class FrameBufferService {
                         analysisResult.getAnalysisReport()
                 );
 
-                // 2. 클립 추출 (비동기) - 추출 완료 후 이벤트에 clipUrl 업데이트
-                clipExtractionService.extractAndSaveClipAsync(cameraId, event.getId(), 10);
+                // 2. 클립 추출 (비동기) - HLS 세그먼트를 합쳐서 MinIO에 저장
+                clipExtractionService.extractAndSaveClipAsync(cameraId, event.getId());
 
                 log.info("이벤트 생성 및 클립 추출 요청: eventId={}", event.getId());
             }
