@@ -1,7 +1,9 @@
 package com.aegis.aegisbackend.controller;
 
 import com.aegis.aegisbackend.dto.CameraDto;
+import com.aegis.aegisbackend.dto.StreamDto.StreamAccessResponse;
 import com.aegis.aegisbackend.service.CameraService;
+import com.aegis.aegisbackend.service.StreamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,6 +19,7 @@ import java.util.UUID;
 public class CameraController {
 
     private final CameraService cameraService;
+    private final StreamService streamService;
 
     @GetMapping
     public ResponseEntity<List<CameraDto>> getAllCameras(@AuthenticationPrincipal UserDetails userDetails) {
@@ -37,5 +40,14 @@ public class CameraController {
             @RequestBody CameraDto.UpdateRequest request) {
         CameraDto camera = cameraService.updateCamera(id, request);
         return ResponseEntity.ok(camera);
+    }
+
+    @PostMapping("/{id}/stream")
+    public ResponseEntity<StreamAccessResponse> requestStreamAccess(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        StreamAccessResponse response = streamService.requestStreamAccess(userId, id);
+        return ResponseEntity.ok(response);
     }
 }
