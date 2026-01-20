@@ -26,6 +26,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final EventRepository eventRepository;
+    private final SseEmitterService sseEmitterService;
 
     @Transactional(readOnly = true)
     public List<NotificationDto> getNotificationsByUserId(UUID userId) {
@@ -60,8 +61,12 @@ public class NotificationService {
                 .read(false)
                 .build();
 
-        notificationRepository.save(notification);
+        Notification saved = notificationRepository.save(notification);
         log.debug("Notification created for user: {}", userId);
+
+        // SSE로 실시간 알림 전송
+        NotificationDto dto = toNotificationDto(saved);
+        sseEmitterService.sendNotification(userId, dto);
     }
 
     @Transactional
