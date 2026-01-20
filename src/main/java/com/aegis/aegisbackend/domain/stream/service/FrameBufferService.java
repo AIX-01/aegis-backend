@@ -2,8 +2,8 @@ package com.aegis.aegisbackend.domain.stream.service;
 
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.service.EventService;
-import com.aegis.aegisbackend.infra.agent.AgentService;
-import com.aegis.aegisbackend.infra.agent.dto.AgentAnalysisResponse;
+import com.aegis.aegisbackend.infra.ai.AiService;
+import com.aegis.aegisbackend.infra.ai.dto.AiAnalysisResponse;
 import com.aegis.aegisbackend.infra.mediamtx.ClipExtractionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 /**
  * 프레임 버퍼 서비스
  * - 썸네일: Redis 저장 (카메라당 최신 1장, 5초 TTL)
- * - Agent 버퍼: 메모리 저장 (카메라당 8장 수집 후 분석)
+ * - AI 버퍼: 메모리 저장 (카메라당 8장 수집 후 분석)
  * - 위험 감지 시 이벤트 생성 + 클립 추출
  */
 @Slf4j
@@ -28,22 +28,22 @@ import java.util.stream.Collectors;
 public class FrameBufferService {
 
     private final RedisTemplate<String, String> redisTemplate;
-    private final AgentService agentService;
+    private final AiService aiService;
     private final EventService eventService;
     private final ClipExtractionService clipExtractionService;
 
     private static final String THUMBNAIL_PREFIX = "thumbnail:";
     private static final int THUMBNAIL_TTL_SECONDS = 5;
-    private static final int AGENT_BUFFER_SIZE = 8;
+    private static final int AI_BUFFER_SIZE = 8;
 
-    private final Map<UUID, LinkedList<byte[]>> agentBuffers = new ConcurrentHashMap<>();
+    private final Map<UUID, LinkedList<byte[]>> aiBuffers = new ConcurrentHashMap<>();
 
-    /** 프레임 수신 처리: 썸네일 저장 + Agent 버퍼 추가 */
+    /** 프레임 수신 처리: 썸네일 저장 + AI 버퍼 추가 */
     public List<byte[]> processFrame(UUID cameraId, byte[] frameData) {
         saveThumbnail(cameraId, frameData);
-        List<byte[]> fullBuffer = addToAgentBuffer(cameraId, frameData);
+        List<byte[]> fullBuffer = addToAiBuffer(cameraId, frameData);
 
-        // 버퍼가 가득 차면 비동기로 Agent 분석 수행
+        // 버퍼가 가득 차면 비동기로 AI 분석 수행
         if (fullBuffer != null) {
             analyzeFramesAsync(cameraId, fullBuffer);
         }
@@ -56,20 +56,20 @@ public class FrameBufferService {
         return redisTemplate.opsForValue().get(THUMBNAIL_PREFIX + cameraId);
     }
 
-    /** 특정 카메라 Agent 버퍼 초기화 */
-    public void clearAgentBuffer(UUID cameraId) {
-        agentBuffers.remove(cameraId);
+    /** 특정 카메라 AI 버퍼 초기화 */
+    public void clearAiBuffer(UUID cameraId) {
+        aiBuffers.remove(cameraId);
     }
 
-    /** 모든 Agent 버퍼 초기화 */
-    public void clearAllAgentBuffers() {
-        agentBuffers.clear();
+    /** 모든 AI 버퍼 초기화 */
+    public void clearAllAiBuffers() {
+        aiBuffers.clear();
     }
 
-    /** Agent 버퍼 상태 조회 (디버깅용) */
-    public Map<UUID, Integer> getAgentBufferStatus() {
+    /** AI 버퍼 상태 조회 (디버깅용) */
+    public Map<UUID, Integer> getAiBufferStatus() {
         Map<UUID, Integer> status = new HashMap<>();
-        agentBuffers.forEach((id, buffer) -> {
+        aiBuffers.forEach((id, buffer) -> {
             synchronized (buffer) {
                 status.put(id, buffer.size());
             }
@@ -85,14 +85,14 @@ public class FrameBufferService {
         redisTemplate.opsForValue().set(key, base64, THUMBNAIL_TTL_SECONDS, TimeUnit.SECONDS);
     }
 
-    private List<byte[]> addToAgentBuffer(UUID cameraId, byte[] frameData) {
-        LinkedList<byte[]> buffer = agentBuffers.computeIfAbsent(cameraId, k -> new LinkedList<>());
+    private List<byte[]> addToAiBuffer(UUID cameraId, byte[] frameData) {
+        LinkedList<byte[]> buffer = aiBuffers.computeIfAbsent(cameraId, k -> new LinkedList<>());
         synchronized (buffer) {
             buffer.add(frameData);
-            if (buffer.size() >= AGENT_BUFFER_SIZE) {
+            if (buffer.size() >= AI_BUFFER_SIZE) {
                 List<byte[]> frames = new ArrayList<>(buffer);
                 buffer.clear();
-                log.info("Agent 버퍼 가득 참: cameraId={}, frames={}", cameraId, frames.size());
+                log.info("AI 버퍼 가득 참: cameraId={}, frames={}", cameraId, frames.size());
                 return frames;
             }
         }
@@ -100,8 +100,8 @@ public class FrameBufferService {
     }
 
     /**
-     * Agent 분석 비동기 수행
-     * - 8장 프레임을 Agent에 전송하여 분석
+     * AI 분석 비동기 수행
+     * - 8장 프레임을 AI 백엔드에 전송하여 분석
      * - 위험 상황 감지 시 이벤트 생성 + 클립 추출
      */
     @Async
@@ -112,8 +112,8 @@ public class FrameBufferService {
                     .map(Base64.getEncoder()::encodeToString)
                     .collect(Collectors.toList());
 
-            // Agent 분석 요청
-            AgentAnalysisResponse analysisResult = agentService.analyzeFrames(cameraId, base64Frames);
+            // AI 분석 요청
+            AiAnalysisResponse analysisResult = aiService.analyzeFrames(cameraId, base64Frames);
 
             // 위험 상황 감지 시 이벤트 생성 + 클립 추출
             if (analysisResult.isDangerous()) {
@@ -121,7 +121,7 @@ public class FrameBufferService {
                         cameraId, analysisResult.getEventType(), analysisResult.getConfidence());
 
                 // 1. 이벤트 생성
-                Event event = eventService.createEventFromAgent(
+                Event event = eventService.createEventFromAi(
                         cameraId,
                         analysisResult.getEventType(),
                         analysisResult.getDescription(),
@@ -136,7 +136,7 @@ public class FrameBufferService {
                 log.info("이벤트 생성 및 클립 추출 요청: eventId={}", event.getId());
             }
         } catch (Exception e) {
-            log.error("Agent 분석 실패: cameraId={}", cameraId, e);
+            log.error("AI 분석 실패: cameraId={}", cameraId, e);
         }
     }
 }

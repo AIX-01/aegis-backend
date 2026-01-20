@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.agent.dto;
+package com.aegis.aegisbackend.infra.ai.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,14 +8,14 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 /**
- * Agent 분석 응답 DTO
- * - 영상 프레임 분석 결과
+ * AI 분석 응답 DTO
+ * - AI 백엔드에서 반환하는 분석 결과
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AgentAnalysisResponse {
+public class AiAnalysisResponse {
 
     /** 카메라 ID */
     private UUID cameraId;

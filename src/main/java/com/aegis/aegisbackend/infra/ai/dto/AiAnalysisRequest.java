@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.agent.dto;
+package com.aegis.aegisbackend.infra.ai.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,18 +9,18 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Agent 분석 요청 DTO
- * - 영상 프레임 분석 요청
+ * AI 분석 요청 DTO
+ * - 8프레임 버퍼를 AI 백엔드에 전송
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AgentAnalysisRequest {
+public class AiAnalysisRequest {
 
     /** 카메라 ID */
     private UUID cameraId;
 
-    /** Base64 인코딩된 프레임 이미지 목록 */
+    /** Base64 인코딩된 프레임 이미지 목록 (8장) */
     private List<String> frames;
 }
