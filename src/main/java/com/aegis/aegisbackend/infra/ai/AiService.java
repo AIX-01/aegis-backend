@@ -1,10 +1,10 @@
 package com.aegis.aegisbackend.infra.ai;
 
 import com.aegis.aegisbackend.infra.ai.dto.AiAnalysisRequest;
-import com.aegis.aegisbackend.infra.ai.dto.AiAnalysisResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -14,13 +14,8 @@ import java.util.UUID;
 
 /**
  * AI 서비스
- * - 8프레임 버퍼를 AI 백엔드(Python)에 전송하여 분석
- * - 분석 결과를 받아서 반환
- *
- * AI 백엔드에서 처리하는 기능:
- * - 영상 프레임 분석 (위험 상황 감지)
- * - 자동 대응 조치 (TODO: AI 백엔드에서 구현 예정)
- * - 비상연락처 알림 (TODO: AI 백엔드에서 구현 예정)
+ * - 8프레임 버퍼를 AI 백엔드(Python)에 비동기 전송
+ * - 응답을 기다리지 않음 (fire-and-forget)
  */
 @Slf4j
 @Service
@@ -35,30 +30,22 @@ public class AiService {
     @Value("${ai.enabled:false}")
     private boolean aiEnabled;
 
-    @Value("${ai.timeout-seconds:30}")
-    private int timeoutSeconds;
-
     /**
-     * 프레임 버퍼 분석 요청
-     * - 8장의 프레임을 AI 백엔드에 전송하여 분석
+     * 프레임 버퍼를 AI 백엔드에 비동기 전송 (fire-and-forget)
+     * - 8장의 프레임을 AI 백엔드에 전송
+     * - 응답을 기다리지 않음
      *
      * @param cameraId 카메라 ID
      * @param frames Base64 인코딩된 프레임 이미지 목록 (8장)
-     * @return 분석 결과
      */
-    public AiAnalysisResponse analyzeFrames(UUID cameraId, List<String> frames) {
+    @Async
+    public void sendFramesAsync(UUID cameraId, List<String> frames) {
         if (!aiEnabled) {
             log.debug("AI 비활성화 상태 - cameraId={}", cameraId);
-            return AiAnalysisResponse.builder()
-                    .cameraId(cameraId)
-                    .isDangerous(false)
-                    .confidence(0.0)
-                    .eventType(null)
-                    .description("AI 비활성화 상태")
-                    .build();
+            return;
         }
 
-        log.info("AI 분석 요청 - cameraId={}, frames={}", cameraId, frames.size());
+        log.info("AI 분석 요청 전송 - cameraId={}, frames={}", cameraId, frames.size());
 
         try {
             AiAnalysisRequest request = AiAnalysisRequest.builder()
@@ -66,26 +53,20 @@ public class AiService {
                     .frames(frames)
                     .build();
 
-            AiAnalysisResponse response = webClientBuilder.build()
+            webClientBuilder.build()
                     .post()
                     .uri(aiApiUrl + "/analyze")
                     .bodyValue(request)
                     .retrieve()
-                    .bodyToMono(AiAnalysisResponse.class)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .block();
-
-            if (response != null) {
-                log.info("AI 분석 완료 - cameraId={}, isDangerous={}, eventType={}",
-                        cameraId, response.isDangerous(), response.getEventType());
-                return response;
-            }
-
-            return createErrorResponse(cameraId, "AI 응답 없음");
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(5))
+                    .subscribe(
+                            response -> log.debug("AI 응답 수신: cameraId={}", cameraId),
+                            error -> log.warn("AI 요청 실패: cameraId={}, error={}", cameraId, error.getMessage())
+                    );
 
         } catch (Exception e) {
-            log.error("AI 분석 실패 - cameraId={}, error={}", cameraId, e.getMessage());
-            return createErrorResponse(cameraId, "AI 분석 실패: " + e.getMessage());
+            log.error("AI 요청 전송 실패 - cameraId={}, error={}", cameraId, e.getMessage());
         }
     }
 
@@ -111,15 +92,5 @@ public class AiService {
             log.warn("AI 서버 헬스체크 실패 - url={}, error={}", aiApiUrl, e.getMessage());
             return false;
         }
-    }
-
-    private AiAnalysisResponse createErrorResponse(UUID cameraId, String message) {
-        return AiAnalysisResponse.builder()
-                .cameraId(cameraId)
-                .isDangerous(false)
-                .confidence(0.0)
-                .eventType(null)
-                .description(message)
-                .build();
     }
 }

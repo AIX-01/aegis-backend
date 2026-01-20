@@ -2,9 +2,13 @@ package com.aegis.aegisbackend.infra.mediamtx;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
+import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.stream.dto.StreamDto.MediaMTXAuthRequest;
 import com.aegis.aegisbackend.domain.stream.service.FrameBufferService;
 import com.aegis.aegisbackend.domain.stream.service.StreamService;
+import com.aegis.aegisbackend.global.common.enums.EventStatus;
+import com.aegis.aegisbackend.global.common.enums.EventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -12,20 +16,18 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * MediaMTX Webhook 컨트롤러
  * - 카메라 추가/삭제 알림 수신 → 동기화 트리거
  * - 스트림 인증 검증
  * - 프레임 수신
- *
- * 동기화 방식:
- * - MediaMTX에서 pathAdded/pathRemoved 웹훅 수신 시 알림만 받음
- * - Redis 1초 잠금으로 중복 요청 방지
- * - Spring이 MediaMTX API에 전체 목록 요청하여 DB와 동기화
+ * - 클립 추출 (AI 백엔드에서 호출)
  */
 @Slf4j
 @RestController
@@ -37,12 +39,11 @@ public class WebhookController {
     private final StreamService streamService;
     private final FrameBufferService frameBufferService;
     private final CameraRepository cameraRepository;
+    private final EventRepository eventRepository;
+    private final ClipExtractionService clipExtractionService;
 
     /**
      * 카메라 동기화 트리거 (단일 엔드포인트)
-     * - MediaMTX pathAdded/pathRemoved 웹훅 모두 이 엔드포인트로 수신
-     * - 알림만 받고, 실제 동기화는 MediaMTX API 조회로 처리
-     * - Redis 1초 잠금으로 연속 요청 병합
      */
     @PostMapping("/mediamtx/sync")
     public ResponseEntity<Map<String, Boolean>> handleSyncTrigger(
@@ -61,7 +62,7 @@ public class WebhookController {
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
-    /** 프레임 수신 (썸네일 + VLM 버퍼) */
+    /** 프레임 수신 (썸네일 + AI 버퍼) */
     @PostMapping(value = "/mediamtx/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<?> receiveFrame(
             @PathVariable String cameraName,
@@ -77,12 +78,69 @@ public class WebhookController {
             return ResponseEntity.ok(Map.of("processed", false, "reason", "inactive"));
         }
 
-        List<byte[]> vlmFrames = frameBufferService.processFrame(camera.getId(), frameData);
-        if (vlmFrames != null) {
-            log.info("VLM 분석 트리거: camera={}, frames={}", cameraName, vlmFrames.size());
-            // TODO: vlmService.analyze(camera.getId(), vlmFrames)
+        List<byte[]> aiFrames = frameBufferService.processFrame(camera.getId(), frameData);
+        if (aiFrames != null) {
+            log.info("AI 분석 트리거: camera={}, frames={}", cameraName, aiFrames.size());
         }
 
         return ResponseEntity.ok(Map.of("processed", true));
+    }
+
+    /**
+     * 클립 추출 웹훅 (AI 백엔드에서 호출)
+     * - 이벤트 생성 + HLS 세그먼트 → MP4 → MinIO 저장
+     *
+     * @param request cameraId, eventType, description 등
+     */
+    @PostMapping("/clip/extract")
+    public ResponseEntity<?> extractClip(@RequestBody ClipExtractRequest request) {
+        log.info("클립 추출 요청: cameraId={}, eventType={}", request.getCameraId(), request.getEventType());
+
+        try {
+            // 1. 카메라 확인
+            Camera camera = cameraRepository.findById(request.getCameraId())
+                    .orElse(null);
+            if (camera == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "카메라를 찾을 수 없습니다"));
+            }
+
+            // 2. 이벤트 생성
+            Event event = Event.builder()
+                    .camera(camera)
+                    .type(EventType.fromValue(request.getEventType()))
+                    .timestamp(LocalDateTime.now())
+                    .status(EventStatus.PROCESSING)
+                    .description(request.getDescription())
+                    .aiAction(request.getRecommendedAction())
+                    .summary(request.getSummary())
+                    .analysisReport(request.getAnalysisReport())
+                    .build();
+
+            Event savedEvent = eventRepository.save(event);
+            log.info("이벤트 생성: eventId={}", savedEvent.getId());
+
+            // 3. 클립 추출 (비동기) - HLS 세그먼트 → MP4 → MinIO
+            clipExtractionService.extractAndSaveClipAsync(camera.getId(), savedEvent.getId());
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "eventId", savedEvent.getId().toString()
+            ));
+
+        } catch (Exception e) {
+            log.error("클립 추출 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @lombok.Data
+    public static class ClipExtractRequest {
+        private UUID cameraId;
+        private String eventType;
+        private String description;
+        private String recommendedAction;
+        private String summary;
+        private String analysisReport;
     }
 }
