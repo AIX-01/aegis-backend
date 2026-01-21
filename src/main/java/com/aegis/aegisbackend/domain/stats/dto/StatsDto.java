@@ -35,17 +35,4 @@ public class StatsDto {
         private long events;
         private long alerts;
     }
-
-    @Data
-    @Builder
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class SummaryStats {
-        private long todayEvents;
-        private double aiResponseRate;
-        private double avgResponseTime;
-        private long activeAlerts;
-        private double todayEventsChange;
-        private double aiResponseRateChange;
-    }
 }

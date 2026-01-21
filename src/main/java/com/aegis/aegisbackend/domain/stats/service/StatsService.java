@@ -1,20 +1,13 @@
 package com.aegis.aegisbackend.domain.stats.service;
 
 import com.aegis.aegisbackend.domain.stats.dto.StatsDto.*;
-import com.aegis.aegisbackend.global.common.enums.EventStatus;
-import com.aegis.aegisbackend.global.common.enums.EventType;
-import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
-import com.aegis.aegisbackend.domain.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.*;
 
 @Slf4j
@@ -23,8 +16,6 @@ import java.util.*;
 public class StatsService {
 
     private final EventRepository eventRepository;
-    private final CameraRepository cameraRepository;
-    private final NotificationRepository notificationRepository;
 
     @Transactional(readOnly = true)
     public List<DailyStats> getDailyStats() {
@@ -130,44 +121,6 @@ public class StatsService {
         }
 
         return monthlyStats;
-    }
-
-    @Transactional(readOnly = true)
-    public SummaryStats getSummaryStats() {
-        LocalDate today = LocalDate.now();
-        LocalDateTime todayStart = today.atStartOfDay();
-        LocalDateTime todayEnd = today.atTime(LocalTime.MAX);
-
-        LocalDate yesterday = today.minusDays(1);
-        LocalDateTime yesterdayStart = yesterday.atStartOfDay();
-        LocalDateTime yesterdayEnd = yesterday.atTime(LocalTime.MAX);
-
-        // 오늘 이벤트 수
-        long todayEvents = eventRepository.countByTimestampBetween(todayStart, todayEnd);
-        long yesterdayEvents = eventRepository.countByTimestampBetween(yesterdayStart, yesterdayEnd);
-
-        // 전일 대비 변화율 계산
-        double todayEventsChange = 0;
-        if (yesterdayEvents > 0) {
-            todayEventsChange = ((double) (todayEvents - yesterdayEvents) / yesterdayEvents) * 100;
-        }
-
-        // AI 응답률 (처리 완료된 이벤트 비율)
-        long totalEvents = eventRepository.count();
-        long resolvedEvents = eventRepository.countByStatus(EventStatus.RESOLVED);
-        double aiResponseRate = totalEvents > 0 ? ((double) resolvedEvents / totalEvents) * 100 : 0;
-
-        // 활성 알림 수 (미해결 이벤트)
-        long activeAlerts = eventRepository.countByStatus(EventStatus.PROCESSING);
-
-        return SummaryStats.builder()
-                .todayEvents(todayEvents)
-                .aiResponseRate(Math.round(aiResponseRate * 10) / 10.0)
-                .avgResponseTime(2.3) // 임시 고정값
-                .activeAlerts(activeAlerts)
-                .todayEventsChange(Math.round(todayEventsChange * 10) / 10.0)
-                .aiResponseRateChange(2.1) // 임시 고정값
-                .build();
     }
 }
 

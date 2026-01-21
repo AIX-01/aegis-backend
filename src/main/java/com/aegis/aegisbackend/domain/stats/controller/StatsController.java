@@ -32,7 +32,6 @@ public class StatsController {
             allStats.put("daily", statsService.getDailyStats());
             allStats.put("eventTypes", statsService.getEventTypeStats());
             allStats.put("monthly", statsService.getMonthlyStats());
-            allStats.put("summary", statsService.getSummaryStats());
             return ResponseEntity.ok(allStats);
         }
 
@@ -40,7 +39,6 @@ public class StatsController {
             case "daily" -> ResponseEntity.ok(statsService.getDailyStats());
             case "event-types" -> ResponseEntity.ok(statsService.getEventTypeStats());
             case "monthly" -> ResponseEntity.ok(statsService.getMonthlyStats());
-            case "summary" -> ResponseEntity.ok(statsService.getSummaryStats());
             default -> ResponseEntity.badRequest().body(Map.of("error", "Invalid stat type"));
         };
     }
