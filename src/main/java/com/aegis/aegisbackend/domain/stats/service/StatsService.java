@@ -72,16 +72,18 @@ public class StatsService {
 
         Map<String, String> typeNameMap = Map.of(
                 "ASSAULT", "폭행",
-                "THEFT", "절도",
-                "SUSPICIOUS", "의심 행동",
-                "NORMAL", "정상"
+                "BURGLARY", "절도",
+                "DUMP", "투기",
+                "SWOON", "실신",
+                "VANDALISM", "파손"
         );
 
         Map<String, String> colorMap = Map.of(
                 "ASSAULT", "hsl(var(--destructive))",
-                "THEFT", "hsl(var(--warning))",
-                "SUSPICIOUS", "hsl(var(--accent))",
-                "NORMAL", "hsl(var(--success))"
+                "BURGLARY", "hsl(var(--destructive))",
+                "DUMP", "hsl(var(--warning))",
+                "SWOON", "hsl(var(--warning))",
+                "VANDALISM", "hsl(var(--warning))"
         );
 
         List<EventTypeStats> stats = new ArrayList<>();
@@ -111,7 +113,7 @@ public class StatsService {
             String date = row[0].toString();
             long events = ((Number) row[1]).longValue();
 
-            // alerts는 ASSAULT와 THEFT 타입의 이벤트 수 (간단화를 위해 events의 20%로 가정)
+            // alerts는 ASSAULT와 BURGLARY 타입의 이벤트 수 (간단화를 위해 events의 20%로 가정)
             long alerts = (long) (events * 0.2);
 
             monthlyStats.put(date, MonthlyData.builder()
