@@ -65,7 +65,7 @@ public class WebhookController {
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
-    /** 프레임 수신 (썸네일 + AI 버퍼) */
+    /** 프레임 수신 (썸네일: 항상, AI 버퍼: 활성 카메라만) */
     @PostMapping(value = "/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<?> receiveFrame(
             @PathVariable String cameraName,
@@ -76,17 +76,15 @@ public class WebhookController {
             cameraRepository.findByName(name).orElse(null)
         );
 
+        // DB 미등록 카메라는 거부
         if (camera == null) {
             return ResponseEntity.notFound().build();
         }
 
-        if (!camera.getActive()) {
-            return ResponseEntity.ok(Map.of("processed", false, "reason", "inactive"));
-        }
+        // 썸네일은 항상 저장, AI 버퍼는 active=true만
+        frameBufferService.processFrame(camera.getId(), frameData, camera.getActive());
 
-        frameBufferService.processFrame(camera.getId(), frameData);
-
-        return ResponseEntity.ok(Map.of("processed", true));
+        return ResponseEntity.ok(Map.of("processed", true, "aiEnabled", camera.getActive()));
     }
 
     /** 전체 캐시 무효화 */

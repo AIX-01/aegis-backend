@@ -36,9 +36,16 @@ public class FrameBufferService {
     // 카메라별 마지막 프레임 수신 시간
     private final Map<UUID, Long> lastFrameTime = new ConcurrentHashMap<>();
 
-    /** 프레임 수신 처리: 썸네일 저장 + AI 버퍼 추가 */
-    public void processFrame(UUID cameraId, byte[] frameData) {
+    /** 프레임 수신 처리: 썸네일 저장 + AI 버퍼 추가 (활성 카메라만) */
+    public void processFrame(UUID cameraId, byte[] frameData, boolean active) {
+        // 썸네일은 항상 저장 (비활성 카메라도)
         saveThumbnail(cameraId, frameData);
+
+        // AI 버퍼는 활성 카메라만
+        if (!active) {
+            return;
+        }
+
         lastFrameTime.put(cameraId, System.currentTimeMillis());
         List<byte[]> fullBuffer = addToAiBuffer(cameraId, frameData);
 
