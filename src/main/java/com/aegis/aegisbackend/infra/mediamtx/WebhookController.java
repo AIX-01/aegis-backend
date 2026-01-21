@@ -4,6 +4,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
+import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.stream.dto.StreamDto.MediaMTXAuthRequest;
 import com.aegis.aegisbackend.domain.stream.service.FrameBufferService;
 import com.aegis.aegisbackend.domain.stream.service.StreamService;
@@ -40,6 +41,7 @@ public class WebhookController {
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
     private final ClipExtractionService clipExtractionService;
+    private final NotificationService notificationService;
 
     /**
      * 카메라 동기화 트리거 (단일 엔드포인트)
@@ -115,7 +117,11 @@ public class WebhookController {
             Event savedEvent = eventRepository.save(event);
             log.info("이벤트 생성: eventId={}", savedEvent.getId());
 
-            // 3. 클립 추출 (비동기) - HLS 세그먼트 → MP4 → MinIO
+            // 3. 알림 생성 (카메라 접근 권한이 있는 사용자들에게)
+            notificationService.createNotificationsForEvent(savedEvent);
+            log.info("알림 생성 완료: eventId={}", savedEvent.getId());
+
+            // 4. 클립 추출 (비동기) - HLS 세그먼트 → MP4 → MinIO
             clipExtractionService.extractAndSaveClipAsync(camera.getId(), savedEvent.getId());
 
             return ResponseEntity.ok(Map.of(
