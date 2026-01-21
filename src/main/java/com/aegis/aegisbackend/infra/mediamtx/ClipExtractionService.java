@@ -5,6 +5,8 @@ import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.global.common.enums.EventStatus;
+import com.aegis.aegisbackend.global.exception.BusinessException;
+import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -103,7 +105,7 @@ public class ClipExtractionService {
      */
     public String extractAndSaveClip(UUID cameraId, UUID eventId, int segmentCount) {
         Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new RuntimeException("카메라를 찾을 수 없습니다: " + cameraId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND_FOR_CLIP));
 
         String cameraName = camera.getName();
         Path tempDirPath = Path.of(tempDir, eventId.toString());
@@ -115,7 +117,7 @@ public class ClipExtractionService {
             // HLS 세그먼트 다운로드 (HTTP)
             List<Path> segmentFiles = downloadHlsSegments(cameraName, tempDirPath, segmentCount);
             if (segmentFiles.isEmpty()) {
-                throw new RuntimeException("HLS 세그먼트를 다운로드할 수 없습니다: " + cameraName);
+                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "HLS 세그먼트를 다운로드할 수 없습니다: " + cameraName);
             }
 
             log.info("클립 추출 시작: camera={}, segments={}", cameraName, segmentFiles.size());
@@ -130,7 +132,7 @@ public class ClipExtractionService {
             // FFmpeg로 세그먼트 합치기
             boolean success = mergeSegmentsWithFFmpeg(concatListPath, outputPath);
             if (!success) {
-                throw new RuntimeException("FFmpeg 클립 합치기 실패");
+                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "FFmpeg 클립 합치기 실패");
             }
 
             // MinIO에 업로드
@@ -142,9 +144,11 @@ public class ClipExtractionService {
 
             return clipKey;
 
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("클립 추출/저장 실패: camera={}, event={}", cameraName, eventId, e);
-            throw new RuntimeException("클립 추출 실패", e);
+            throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED);
         } finally {
             // 임시 파일 정리
             cleanupTempFiles(tempDirPath);
