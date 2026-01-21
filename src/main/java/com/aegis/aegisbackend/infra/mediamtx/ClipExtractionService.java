@@ -98,6 +98,58 @@ public class ClipExtractionService {
     }
 
     /**
+     * 독립 클립 추출 (이벤트 없이, 동기)
+     * - AI 백엔드에서 클립만 먼저 추출할 때 사용
+     * - 클립 ID(UUID)를 생성하여 MinIO에 저장
+     * - 나중에 이벤트 생성 시 clipKey로 연결
+     */
+    public String extractClipOnly(UUID cameraId, int segmentCount) {
+        Camera camera = cameraRepository.findById(cameraId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND_FOR_CLIP));
+
+        String cameraName = camera.getName();
+        UUID clipId = UUID.randomUUID();  // 독립 클립 ID
+        Path tempDirPath = Path.of(tempDir, clipId.toString());
+
+        try {
+            Files.createDirectories(tempDirPath);
+
+            List<Path> segmentFiles = downloadHlsSegments(cameraName, tempDirPath, segmentCount);
+            if (segmentFiles.isEmpty()) {
+                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "HLS 세그먼트를 다운로드할 수 없습니다: " + cameraName);
+            }
+
+            log.info("독립 클립 추출 시작: camera={}, clipId={}, segments={}", cameraName, clipId, segmentFiles.size());
+
+            Path concatListPath = tempDirPath.resolve("concat.txt");
+            createConcatList(concatListPath, segmentFiles);
+
+            Path outputPath = tempDirPath.resolve("clip.mp4");
+
+            boolean success = mergeSegmentsWithFFmpeg(concatListPath, outputPath);
+            if (!success) {
+                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "FFmpeg 클립 합치기 실패");
+            }
+
+            byte[] clipData = Files.readAllBytes(outputPath);
+            String clipKey = "clips/" + clipId + "/clip.mp4";
+            s3Service.uploadClip(clipKey, clipData, "video/mp4");
+
+            log.info("독립 클립 저장 완료: camera={}, clipKey={}, size={}KB", cameraName, clipKey, clipData.length / 1024);
+
+            return clipKey;
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("독립 클립 추출 실패: camera={}", cameraName, e);
+            throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED);
+        } finally {
+            cleanupTempFiles(tempDirPath);
+        }
+    }
+
+    /**
      * 이벤트 클립 추출 (동기)
      * - MediaMTX HLS API에서 m3u8 파싱 후 세그먼트 다운로드
      * - FFmpeg로 하나의 MP4로 합침

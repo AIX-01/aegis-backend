@@ -28,7 +28,13 @@ public class S3Service {
      */
     public String uploadEventClip(UUID eventId, byte[] clipData, String contentType) {
         String key = buildEventClipKey(eventId);
+        return uploadClip(key, clipData, contentType);
+    }
 
+    /**
+     * 클립 업로드 (키 직접 지정)
+     */
+    public String uploadClip(String key, byte[] clipData, String contentType) {
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucketName)
@@ -37,11 +43,11 @@ public class S3Service {
                     .build();
 
             s3Client.putObject(request, RequestBody.fromBytes(clipData));
-            log.info("Uploaded clip for event: {}", eventId);
+            log.info("Uploaded clip: {}", key);
 
             return key;
         } catch (S3Exception e) {
-            log.error("Failed to upload clip for event {}: {}", eventId, e.getMessage());
+            log.error("Failed to upload clip {}: {}", key, e.getMessage());
             throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
