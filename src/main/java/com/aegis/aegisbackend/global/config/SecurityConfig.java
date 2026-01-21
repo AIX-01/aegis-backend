@@ -36,7 +36,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/api/auth/signup", "/api/auth/refresh").permitAll()
-                        .requestMatchers("/api/webhooks/**").permitAll()
+                        .requestMatchers("/internal/**").permitAll()  // 내부망 전용 (Caddy 미프록시)
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

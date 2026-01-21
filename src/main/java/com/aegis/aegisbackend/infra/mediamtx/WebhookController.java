@@ -23,15 +23,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * MediaMTX Webhook 컨트롤러
+ * MediaMTX Webhook 컨트롤러 (내부망 전용)
  * - 카메라 추가/삭제 알림 수신 → 동기화 트리거
  * - 스트림 인증 검증
  * - 프레임 수신
- * - 클립 추출 (AI 백엔드에서 호출)
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/webhooks")
+@RequestMapping("/internal/webhooks/mediamtx")
 @RequiredArgsConstructor
 public class WebhookController {
 
@@ -49,7 +48,7 @@ public class WebhookController {
     /**
      * 카메라 동기화 트리거 (단일 엔드포인트)
      */
-    @PostMapping("/mediamtx/sync")
+    @PostMapping("/sync")
     public ResponseEntity<Map<String, Boolean>> handleSyncTrigger(
             @RequestBody(required = false) Map<String, Object> payload) {
         log.debug("MediaMTX 동기화 트리거: {}", payload);
@@ -58,7 +57,7 @@ public class WebhookController {
     }
 
     /** 스트림 인증 검증 */
-    @PostMapping("/mediamtx/auth")
+    @PostMapping("/auth")
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
         boolean valid = streamService.validateStreamAuth(
                 request.getUser(), request.getPath(), request.getAction());
@@ -67,7 +66,7 @@ public class WebhookController {
     }
 
     /** 프레임 수신 (썸네일 + AI 버퍼) */
-    @PostMapping(value = "/mediamtx/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    @PostMapping(value = "/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<?> receiveFrame(
             @PathVariable String cameraName,
             @RequestBody byte[] frameData) {
