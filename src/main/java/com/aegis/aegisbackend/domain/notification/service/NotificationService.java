@@ -8,7 +8,7 @@ import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.NotificationType;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.repository.NotificationRepository;
@@ -48,7 +48,7 @@ public class NotificationService {
     @Transactional
     public void createNotification(UUID userId, UUID eventId, NotificationType type, String title, String message) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         Event event = null;
         if (eventId != null) {
@@ -75,7 +75,7 @@ public class NotificationService {
     @Transactional
     public NotificationDto markAsRead(UUID notificationId) {
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new AegisException(ErrorCode.NOTIFICATION_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
 
         notification.setRead(true);
         notificationRepository.save(notification);
@@ -92,7 +92,7 @@ public class NotificationService {
     @Transactional
     public void deleteNotification(UUID notificationId) {
         if (!notificationRepository.existsById(notificationId)) {
-            throw new AegisException(ErrorCode.NOTIFICATION_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.deleteById(notificationId);
     }

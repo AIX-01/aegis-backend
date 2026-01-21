@@ -4,7 +4,7 @@ import com.aegis.aegisbackend.domain.auth.dto.AuthDto.*;
 import com.aegis.aegisbackend.domain.user.dto.UserDto;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
 import com.aegis.aegisbackend.domain.user.repository.UserRepository;
@@ -40,16 +40,16 @@ public class AuthService {
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new AegisException(ErrorCode.EMAIL_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_NOT_FOUND));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new AegisException(ErrorCode.INVALID_PASSWORD);
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
         if (!user.getApproved()) {
-            throw new AegisException(ErrorCode.USER_NOT_APPROVED);
+            throw new BusinessException(ErrorCode.USER_NOT_APPROVED);
         }
         if (user.getDeleted()) {
-            throw new AegisException(ErrorCode.USER_DELETED);
+            throw new BusinessException(ErrorCode.USER_DELETED);
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(
@@ -68,7 +68,7 @@ public class AuthService {
     @Transactional
     public void signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new AegisException(ErrorCode.DUPLICATE_EMAIL);
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         User user = User.builder()
@@ -94,20 +94,20 @@ public class AuthService {
     @Transactional(readOnly = true)
     public RefreshResponse refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isEmpty()) {
-            throw new AegisException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
 
         String userIdStr = redisTokenService.getUserIdByRefreshToken(refreshToken);
         if (userIdStr == null) {
-            throw new AegisException(ErrorCode.INVALID_REFRESH_TOKEN);
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         UUID userId = UUID.fromString(userIdStr);
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.INVALID_USER));
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_USER));
 
         if (!user.getApproved()) {
-            throw new AegisException(ErrorCode.INVALID_USER);
+            throw new BusinessException(ErrorCode.INVALID_USER);
         }
 
         String newAccessToken = jwtTokenProvider.createAccessToken(
@@ -121,20 +121,20 @@ public class AuthService {
     @Transactional(readOnly = true)
     public UserDto getCurrentUser(UUID userId) {
         User user = userRepository.findByIdWithCameras(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         return toUserDto(user);
     }
 
     @Transactional
     public void changePassword(UUID userId, PasswordChangeRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new AegisException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
+            throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
         if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
-            throw new AegisException(ErrorCode.PASSWORD_TOO_SHORT);
+            throw new BusinessException(ErrorCode.PASSWORD_TOO_SHORT);
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -146,7 +146,7 @@ public class AuthService {
     @Transactional
     public UserDto updateProfile(UUID userId, ProfileUpdateRequest request) {
         User user = userRepository.findByIdWithCameras(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (request.getName() != null && !request.getName().isBlank()) {
             user.setName(request.getName());
@@ -161,7 +161,7 @@ public class AuthService {
     @Transactional
     public void deleteAccount(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         user.setDeleted(true);
         user.setDeletedAt(LocalDateTime.now());

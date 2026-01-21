@@ -6,7 +6,7 @@ import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.camera.entity.UserCamera;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
@@ -39,7 +39,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserDto getUserById(UUID userId) {
         User user = userRepository.findByIdWithCameras(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND_BY_ID));
 
         return toUserDto(user);
     }
@@ -47,7 +47,7 @@ public class UserService {
     @Transactional
     public UserDto updateUser(UUID userId, UserDto.UpdateRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND_BY_ID));
 
         // 이름 업데이트
         if (request.getName() != null) {
@@ -69,7 +69,7 @@ public class UserService {
                 for (String cameraIdStr : request.getAssignedCameras()) {
                     UUID cameraId = UUID.fromString(cameraIdStr);
                     Camera camera = cameraRepository.findById(cameraId)
-                            .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+                            .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
                     UserCamera userCamera = UserCamera.builder()
                             .user(user)
@@ -94,7 +94,7 @@ public class UserService {
     @Transactional
     public void deleteUser(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND_BY_ID));
 
         UserDto userDto = toUserDto(user);
         userRepository.deleteById(userId);
@@ -107,7 +107,7 @@ public class UserService {
     @Transactional
     public UserDto approveUser(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND_BY_ID));
 
         user.setApproved(true);
         userRepository.save(user);

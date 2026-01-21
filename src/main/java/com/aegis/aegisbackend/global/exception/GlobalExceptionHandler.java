@@ -13,9 +13,9 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(AegisException.class)
-    public ResponseEntity<Map<String, String>> handleAegisException(AegisException e) {
-        log.error("AegisException: {}", e.getMessage());
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<Map<String, String>> handleBusinessException(BusinessException e) {
+        log.error("BusinessException: {}", e.getMessage());
         return ResponseEntity
                 .status(e.getErrorCode().getStatus())
                 .body(Map.of("error", e.getMessage()));

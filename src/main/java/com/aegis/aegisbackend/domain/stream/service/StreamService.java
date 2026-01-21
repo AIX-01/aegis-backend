@@ -4,7 +4,7 @@ import com.aegis.aegisbackend.domain.stream.dto.StreamDto.StreamAccessResponse;
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
@@ -41,9 +41,9 @@ public class StreamService {
     @Transactional(readOnly = true)
     public StreamAccessResponse requestStreamAccess(UUID userId, UUID cameraId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
         validateAccess(user, camera, cameraId);
 
@@ -88,15 +88,15 @@ public class StreamService {
         if (user.getRole() != UserRole.ADMIN) {
             List<UUID> assigned = userCameraRepository.findCameraIdsByUserId(user.getId());
             if (!assigned.contains(cameraId)) {
-                throw new AegisException(ErrorCode.CAMERA_ACCESS_DENIED);
+                throw new BusinessException(ErrorCode.CAMERA_ACCESS_DENIED);
             }
         }
         // 카메라 상태 확인
         if (!camera.getConnected()) {
-            throw new AegisException(ErrorCode.CAMERA_NOT_CONNECTED);
+            throw new BusinessException(ErrorCode.CAMERA_NOT_CONNECTED);
         }
         if (!camera.getActive()) {
-            throw new AegisException(ErrorCode.CAMERA_NOT_ACTIVE);
+            throw new BusinessException(ErrorCode.CAMERA_NOT_ACTIVE);
         }
     }
 }

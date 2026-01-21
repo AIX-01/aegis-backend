@@ -10,7 +10,7 @@ import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.NotificationType;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
@@ -42,7 +42,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public List<EventDto> getAllEvents(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         List<Event> events;
 
@@ -61,7 +61,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public EventDto getEventById(UUID eventId) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new AegisException(ErrorCode.EVENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
         return toEventDto(event);
     }
@@ -73,7 +73,7 @@ public class EventService {
     @Transactional
     public void updateClipUrl(UUID eventId, String clipUrl) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new AegisException(ErrorCode.EVENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
         event.setClipUrl(clipUrl);
         event.setStatus(EventStatus.RESOLVED);
@@ -84,7 +84,7 @@ public class EventService {
     @Transactional
     public EventDto createEvent(EventDto.CreateRequest request) {
         Camera camera = cameraRepository.findById(UUID.fromString(request.getCameraId()))
-                .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
         Event event = Event.builder()
                 .camera(camera)
@@ -120,7 +120,7 @@ public class EventService {
     @Transactional
     public EventDto updateEventStatus(UUID eventId, String status) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new AegisException(ErrorCode.EVENT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
         event.setStatus(EventStatus.fromValue(status));
         eventRepository.save(event);

@@ -5,7 +5,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
-import com.aegis.aegisbackend.global.exception.AegisException;
+import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
@@ -37,7 +37,7 @@ public class CameraService {
     @Transactional(readOnly = true)
     public List<CameraDto> getAllCameras(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         List<Camera> cameras = user.getRole() == UserRole.ADMIN
                 ? cameraRepository.findAll()
@@ -49,14 +49,14 @@ public class CameraService {
     @Transactional(readOnly = true)
     public CameraDto getCameraById(UUID cameraId) {
         Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
         return toDto(camera);
     }
 
     @Transactional
     public CameraDto updateCamera(UUID cameraId, CameraDto.UpdateRequest request) {
         Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new AegisException(ErrorCode.CAMERA_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
         if (request.getAlias() != null) {
             camera.setAlias(request.getAlias());
