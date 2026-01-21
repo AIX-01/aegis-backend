@@ -148,7 +148,7 @@ public class StatsService {
         long resolvedEvents = eventRepository.countByStatus(EventStatus.RESOLVED);
         double aiResponseRate = totalEvents > 0 ? ((double) resolvedEvents / totalEvents) * 100 : 0;
 
-        // 활성 알림 수 (ASSAULT, THEFT 타입의 미해결 이벤트)
+        // 활성 알림 수 (미해결 이벤트)
         long activeAlerts = eventRepository.countByStatus(EventStatus.PROCESSING);
 
         return SummaryStats.builder()

@@ -42,7 +42,7 @@ public class Event {
     @JoinColumn(name = "camera_id", nullable = false)
     private Camera camera;
 
-    /** 이벤트 유형 (ASSAULT/THEFT/SUSPICIOUS/NORMAL) */
+    /** 이벤트 유형 (ASSAULT/BURGLARY/DUMP/SWOON/VANDALISM) */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EventType type;
