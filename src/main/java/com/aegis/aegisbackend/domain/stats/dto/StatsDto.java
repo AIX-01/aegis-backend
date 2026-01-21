@@ -48,22 +48,4 @@ public class StatsDto {
         private double todayEventsChange;
         private double aiResponseRateChange;
     }
-
-    @Data
-    @Builder
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class SystemStatus {
-        private String status;
-        private String message;
-    }
-
-    @Data
-    @Builder
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class StorageInfo {
-        private long usedStorage;
-        private long totalStorage;
-    }
 }

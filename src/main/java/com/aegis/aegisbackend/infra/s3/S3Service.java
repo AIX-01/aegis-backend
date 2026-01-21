@@ -129,34 +129,6 @@ public class S3Service {
         }
     }
 
-    /**
-     * 스토리지 사용량 계산 (GB 단위)
-     */
-    public long getUsedStorageGB() {
-        try {
-            ListObjectsV2Request request = ListObjectsV2Request.builder()
-                    .bucket(bucketName)
-                    .build();
-
-            long totalBytes = 0;
-            ListObjectsV2Response response;
-
-            do {
-                response = s3Client.listObjectsV2(request);
-                for (S3Object object : response.contents()) {
-                    totalBytes += object.size();
-                }
-                request = request.toBuilder()
-                        .continuationToken(response.nextContinuationToken())
-                        .build();
-            } while (response.isTruncated());
-
-            return totalBytes / (1024 * 1024 * 1024); // Convert to GB
-        } catch (S3Exception e) {
-            log.error("Failed to calculate storage usage: {}", e.getMessage());
-            return 0;
-        }
-    }
 
     private String buildEventClipKey(UUID eventId) {
         return "events/" + eventId + "/clip.mp4";

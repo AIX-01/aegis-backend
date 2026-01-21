@@ -33,8 +33,6 @@ public class StatsController {
             allStats.put("eventTypes", statsService.getEventTypeStats());
             allStats.put("monthly", statsService.getMonthlyStats());
             allStats.put("summary", statsService.getSummaryStats());
-            allStats.put("system", statsService.getSystemStatus());
-            allStats.put("storage", statsService.getStorageInfo());
             return ResponseEntity.ok(allStats);
         }
 
@@ -43,8 +41,6 @@ public class StatsController {
             case "event-types" -> ResponseEntity.ok(statsService.getEventTypeStats());
             case "monthly" -> ResponseEntity.ok(statsService.getMonthlyStats());
             case "summary" -> ResponseEntity.ok(statsService.getSummaryStats());
-            case "system" -> ResponseEntity.ok(statsService.getSystemStatus());
-            case "storage" -> ResponseEntity.ok(statsService.getStorageInfo());
             default -> ResponseEntity.badRequest().body(Map.of("error", "Invalid stat type"));
         };
     }

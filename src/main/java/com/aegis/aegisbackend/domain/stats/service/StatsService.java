@@ -6,7 +6,6 @@ import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.repository.NotificationRepository;
-import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,9 +25,6 @@ public class StatsService {
     private final EventRepository eventRepository;
     private final CameraRepository cameraRepository;
     private final NotificationRepository notificationRepository;
-    private final S3Service s3Service;
-
-    private static final long TOTAL_STORAGE_GB = 500;
 
     @Transactional(readOnly = true)
     public List<DailyStats> getDailyStats() {
@@ -162,45 +158,6 @@ public class StatsService {
                 .activeAlerts(activeAlerts)
                 .todayEventsChange(Math.round(todayEventsChange * 10) / 10.0)
                 .aiResponseRateChange(2.1) // 임시 고정값
-                .build();
-    }
-
-    @Transactional(readOnly = true)
-    public SystemStatus getSystemStatus() {
-        // 카메라 연결 상태 체크
-        long totalCameras = cameraRepository.count();
-        long connectedCameras = cameraRepository.findByConnected(true).size();
-
-        String status;
-        String message;
-
-        if (totalCameras == 0) {
-            status = "warning";
-            message = "등록된 카메라가 없습니다.";
-        } else if (connectedCameras == totalCameras) {
-            status = "normal";
-            message = "시스템 정상";
-        } else if (connectedCameras >= totalCameras * 0.5) {
-            status = "warning";
-            message = String.format("%d/%d 카메라 연결됨", connectedCameras, totalCameras);
-        } else {
-            status = "error";
-            message = String.format("대부분의 카메라가 오프라인입니다 (%d/%d)", connectedCameras, totalCameras);
-        }
-
-        return SystemStatus.builder()
-                .status(status)
-                .message(message)
-                .build();
-    }
-
-    @Transactional(readOnly = true)
-    public StorageInfo getStorageInfo() {
-        long usedStorage = s3Service.getUsedStorageGB();
-
-        return StorageInfo.builder()
-                .usedStorage(usedStorage)
-                .totalStorage(TOTAL_STORAGE_GB)
                 .build();
     }
 }
