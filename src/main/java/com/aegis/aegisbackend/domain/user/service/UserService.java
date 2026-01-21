@@ -4,6 +4,7 @@ import com.aegis.aegisbackend.domain.user.dto.UserDto;
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.camera.entity.UserCamera;
+import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.AegisException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
@@ -26,6 +27,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserCameraRepository userCameraRepository;
     private final CameraRepository cameraRepository;
+    private final SseEmitterService sseEmitterService;
 
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
@@ -82,17 +84,24 @@ public class UserService {
         userRepository.save(user);
         log.info("User updated: {}", userId);
 
-        return toUserDto(user);
+        // SSE로 멤버 업데이트 브로드캐스트
+        UserDto userDto = toUserDto(user);
+        sseEmitterService.broadcastMember(userDto);
+
+        return userDto;
     }
 
     @Transactional
     public void deleteUser(UUID userId) {
-        if (!userRepository.existsById(userId)) {
-            throw new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID);
-        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND_BY_ID));
 
+        UserDto userDto = toUserDto(user);
         userRepository.deleteById(userId);
         log.info("User deleted: {}", userId);
+
+        // SSE로 멤버 삭제 브로드캐스트
+        sseEmitterService.broadcastMember(userDto);
     }
 
     @Transactional
@@ -104,7 +113,11 @@ public class UserService {
         userRepository.save(user);
         log.info("User approved: {}", userId);
 
-        return toUserDto(user);
+        // SSE로 멤버 승인 브로드캐스트
+        UserDto userDto = toUserDto(user);
+        sseEmitterService.broadcastMember(userDto);
+
+        return userDto;
     }
 
     private UserDto toUserDto(User user) {

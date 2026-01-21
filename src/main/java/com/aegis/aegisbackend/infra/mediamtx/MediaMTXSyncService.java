@@ -112,7 +112,7 @@ public class MediaMTXSyncService {
                     log.warn("캐시 무효화 실패: {}", e.getMessage());
                 }
 
-                sseEmitterService.broadcastCameraListRefresh();
+                sseEmitterService.broadcastCamera("refresh");
                 log.info("카메라 목록 갱신 SSE 전송");
             }
 

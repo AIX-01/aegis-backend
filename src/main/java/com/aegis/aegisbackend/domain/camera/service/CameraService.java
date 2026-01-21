@@ -70,7 +70,7 @@ public class CameraService {
 
         // SSE로 카메라 업데이트 브로드캐스트
         CameraDto updatedDto = toDto(camera);
-        sseEmitterService.broadcastCameraUpdate(updatedDto);
+        sseEmitterService.broadcastCamera(updatedDto);
 
         return updatedDto;
     }

@@ -123,34 +123,51 @@ public class SseEmitterService {
     }
 
     /**
-     * 카메라 업데이트 이벤트 브로드캐스트 (모든 연결된 사용자에게 전송)
+     * 카메라 이벤트 브로드캐스트 (추가/삭제/상태변경)
      */
-    public void broadcastCameraUpdate(Object cameraData) {
-        log.debug("카메라 업데이트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+    public void broadcastCamera(Object cameraData) {
+        log.debug("카메라 이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
         emitters.forEach((userId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()
-                        .name("camera-update")
+                        .name("camera")
                         .data(cameraData));
             } catch (IOException e) {
-                log.warn("카메라 업데이트 SSE 전송 실패: userId={}", userId);
+                log.warn("카메라 SSE 전송 실패: userId={}", userId);
                 emitters.remove(userId);
             }
         });
     }
 
     /**
-     * 카메라 목록 전체 갱신 이벤트 브로드캐스트
+     * 이벤트 브로드캐스트 (이벤트 생성/삭제/상태변경)
      */
-    public void broadcastCameraListRefresh() {
-        log.debug("카메라 목록 갱신 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+    public void broadcastEvent(Object eventData) {
+        log.debug("이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
         emitters.forEach((userId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()
-                        .name("camera-refresh")
-                        .data("refresh"));
+                        .name("event")
+                        .data(eventData));
             } catch (IOException e) {
-                log.warn("카메라 갱신 SSE 전송 실패: userId={}", userId);
+                log.warn("이벤트 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
+     * 멤버 이벤트 브로드캐스트 (승인/삭제/역할변경)
+     */
+    public void broadcastMember(Object memberData) {
+        log.debug("멤버 이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("member")
+                        .data(memberData));
+            } catch (IOException e) {
+                log.warn("멤버 SSE 전송 실패: userId={}", userId);
                 emitters.remove(userId);
             }
         });

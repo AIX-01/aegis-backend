@@ -5,6 +5,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
+import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.NotificationType;
@@ -35,6 +36,7 @@ public class EventService {
     private final UserRepository userRepository;
     private final UserCameraRepository userCameraRepository;
     private final NotificationService notificationService;
+    private final SseEmitterService sseEmitterService;
     private final S3Service s3Service;
 
     @Transactional(readOnly = true)
@@ -108,7 +110,11 @@ public class EventService {
         // 이벤트 발생 시 관련 사용자들에게 알림 생성
         createNotificationsForEvent(savedEvent);
 
-        return toEventDto(savedEvent);
+        // SSE로 이벤트 생성 브로드캐스트
+        EventDto eventDto = toEventDto(savedEvent);
+        sseEmitterService.broadcastEvent(eventDto);
+
+        return eventDto;
     }
 
     @Transactional
@@ -120,7 +126,11 @@ public class EventService {
         eventRepository.save(event);
         log.info("Event {} status updated to: {}", eventId, status);
 
-        return toEventDto(event);
+        // SSE로 이벤트 상태 변경 브로드캐스트
+        EventDto eventDto = toEventDto(event);
+        sseEmitterService.broadcastEvent(eventDto);
+
+        return eventDto;
     }
 
     /**
