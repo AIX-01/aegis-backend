@@ -27,7 +27,7 @@ public class FrameBufferService {
     private final AiService aiService;
 
     private static final String THUMBNAIL_PREFIX = "thumbnail:";
-    private static final int THUMBNAIL_TTL_SECONDS = 5;
+    private static final int THUMBNAIL_TTL_SECONDS = 3;
     private static final int AI_BUFFER_SIZE = 8;
     private static final long BUFFER_TIMEOUT_MS = 3_000;  // 3초 타임아웃
 
