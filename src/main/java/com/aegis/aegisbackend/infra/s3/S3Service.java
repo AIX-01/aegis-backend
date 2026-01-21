@@ -1,5 +1,7 @@
 package com.aegis.aegisbackend.infra.s3;
 
+import com.aegis.aegisbackend.global.exception.BusinessException;
+import com.aegis.aegisbackend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,7 +42,7 @@ public class S3Service {
             return key;
         } catch (S3Exception e) {
             log.error("Failed to upload clip for event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Failed to upload clip", e);
+            throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
 
@@ -64,7 +66,7 @@ public class S3Service {
             return key;
         } catch (S3Exception e) {
             log.error("Failed to upload clip for event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Failed to upload clip", e);
+            throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
 
@@ -86,7 +88,7 @@ public class S3Service {
             return null;
         } catch (S3Exception e) {
             log.error("Failed to download clip for event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Failed to download clip", e);
+            throw new BusinessException(ErrorCode.S3_DOWNLOAD_FAILED);
         }
     }
 
@@ -106,7 +108,7 @@ public class S3Service {
             log.info("Deleted clip for event: {}", eventId);
         } catch (S3Exception e) {
             log.error("Failed to delete clip for event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Failed to delete clip", e);
+            throw new BusinessException(ErrorCode.S3_DELETE_FAILED);
         }
     }
 
@@ -134,4 +136,3 @@ public class S3Service {
         return "events/" + eventId + "/clip.mp4";
     }
 }
-
