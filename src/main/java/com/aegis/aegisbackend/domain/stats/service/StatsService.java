@@ -105,16 +105,23 @@ public class StatsService {
     @Transactional(readOnly = true)
     public Map<String, MonthlyData> getMonthlyStats() {
         LocalDateTime monthAgo = LocalDateTime.now().minusDays(30);
-        List<Object[]> results = eventRepository.countByDateSince(monthAgo);
+        List<Object[]> eventResults = eventRepository.countByDateSince(monthAgo);
+        List<Object[]> alertResults = eventRepository.countAlertsByDateSince(monthAgo);
+
+        // alerts 데이터를 Map으로 변환
+        Map<String, Long> alertsMap = new HashMap<>();
+        for (Object[] row : alertResults) {
+            String date = row[0].toString();
+            long alerts = ((Number) row[1]).longValue();
+            alertsMap.put(date, alerts);
+        }
 
         Map<String, MonthlyData> monthlyStats = new LinkedHashMap<>();
 
-        for (Object[] row : results) {
+        for (Object[] row : eventResults) {
             String date = row[0].toString();
             long events = ((Number) row[1]).longValue();
-
-            // alerts는 ASSAULT와 BURGLARY 타입의 이벤트 수 (간단화를 위해 events의 20%로 가정)
-            long alerts = (long) (events * 0.2);
+            long alerts = alertsMap.getOrDefault(date, 0L);
 
             monthlyStats.put(date, MonthlyData.builder()
                     .events(events)

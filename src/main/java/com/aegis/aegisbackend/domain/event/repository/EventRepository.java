@@ -48,6 +48,9 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     @Query("SELECT FUNCTION('DATE', e.timestamp) as date, COUNT(e) FROM Event e WHERE e.timestamp >= :startDate GROUP BY FUNCTION('DATE', e.timestamp)")
     List<Object[]> countByDateSince(@Param("startDate") LocalDateTime startDate);
 
+    @Query("SELECT FUNCTION('DATE', e.timestamp) as date, COUNT(e) FROM Event e WHERE e.timestamp >= :startDate AND (e.type = 'ASSAULT' OR e.type = 'BURGLARY') GROUP BY FUNCTION('DATE', e.timestamp)")
+    List<Object[]> countAlertsByDateSince(@Param("startDate") LocalDateTime startDate);
+
     @Query("SELECT FUNCTION('DAYOFWEEK', e.timestamp) as dayOfWeek, COUNT(e), SUM(CASE WHEN e.status = 'RESOLVED' THEN 1 ELSE 0 END) FROM Event e WHERE e.timestamp >= :startDate GROUP BY FUNCTION('DAYOFWEEK', e.timestamp)")
     List<Object[]> countByDayOfWeekSince(@Param("startDate") LocalDateTime startDate);
 }
