@@ -16,8 +16,8 @@ import java.util.UUID;
 
 /**
  * 이벤트 엔티티
- * - VLM 분석으로 감지된 위험/이상 상황 기록
- * - 폭행, 절도, 의심, 정상 등 유형 구분
+ * - AI 분석으로 감지된 위험/이상 상황 기록
+ * - 폭행, 절도, 투기, 실신, 파손 등 유형 구분
  */
 @Entity
 @Table(name = "events", indexes = {

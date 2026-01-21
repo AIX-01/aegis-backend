@@ -13,7 +13,7 @@ public class EventDto {
     private String id;
     private String cameraId;
     private String cameraName;
-    private String type; // "assault" | "theft" | "suspicious" | "normal"
+    private String type; // "assault" | "burglary" | "dump" | "swoon" | "vandalism"
     private String timestamp;
     private String status; // "processing" | "resolved"
     private String description;
