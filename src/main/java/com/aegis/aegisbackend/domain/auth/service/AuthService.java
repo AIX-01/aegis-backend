@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,6 +47,9 @@ public class AuthService {
         }
         if (!user.getApproved()) {
             throw new AegisException(ErrorCode.USER_NOT_APPROVED);
+        }
+        if (user.getDeleted()) {
+            throw new AegisException(ErrorCode.USER_DELETED);
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(
@@ -136,6 +140,33 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
         log.info("비밀번호 변경: userId={}", userId);
+    }
+
+    /** 프로필 수정 */
+    @Transactional
+    public UserDto updateProfile(UUID userId, ProfileUpdateRequest request) {
+        User user = userRepository.findByIdWithCameras(userId)
+                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+
+        if (request.getName() != null && !request.getName().isBlank()) {
+            user.setName(request.getName());
+        }
+
+        userRepository.save(user);
+        log.info("프로필 수정: userId={}", userId);
+        return toUserDto(user);
+    }
+
+    /** 회원탈퇴 (소프트 딜리트) */
+    @Transactional
+    public void deleteAccount(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AegisException(ErrorCode.USER_NOT_FOUND));
+
+        user.setDeleted(true);
+        user.setDeletedAt(LocalDateTime.now());
+        userRepository.save(user);
+        log.info("회원탈퇴: userId={}", userId);
     }
 
     // === Private ===

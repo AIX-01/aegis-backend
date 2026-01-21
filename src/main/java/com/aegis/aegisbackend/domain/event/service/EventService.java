@@ -141,9 +141,8 @@ public class EventService {
 
         // 알림 타입 결정
         NotificationType notificationType = switch (event.getType()) {
-            case ASSAULT, THEFT -> NotificationType.ALERT;
-            case SUSPICIOUS -> NotificationType.WARNING;
-            case NORMAL -> NotificationType.INFO;
+            case ASSAULT, BURGLARY -> NotificationType.ALERT;
+            case DUMP, SWOON, VANDALISM -> NotificationType.WARNING;
         };
 
         // 알림 제목 및 메시지 생성
@@ -167,9 +166,10 @@ public class EventService {
     private String getEventTitle(EventType type) {
         return switch (type) {
             case ASSAULT -> "폭행 감지";
-            case THEFT -> "절도 감지";
-            case SUSPICIOUS -> "의심 행동 감지";
-            case NORMAL -> "정상 활동";
+            case BURGLARY -> "절도 감지";
+            case DUMP -> "투기 감지";
+            case SWOON -> "실신 감지";
+            case VANDALISM -> "파손 감지";
         };
     }
 

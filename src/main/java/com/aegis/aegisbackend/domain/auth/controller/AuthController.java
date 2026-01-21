@@ -108,6 +108,39 @@ public class AuthController {
         ));
     }
 
+    /** 프로필 수정 (이름 변경) */
+    @PatchMapping("/me")
+    public ResponseEntity<UserDto> updateProfile(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody ProfileUpdateRequest request) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        UserDto user = authService.updateProfile(userId, request);
+        return ResponseEntity.ok(user);
+    }
+
+    /** 회원탈퇴 (소프트 딜리트) */
+    @DeleteMapping("/me")
+    public ResponseEntity<Map<String, Object>> deleteAccount(
+            @AuthenticationPrincipal UserDetails userDetails,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        authService.deleteAccount(userId);
+
+        // Refresh Token 쿠키 삭제
+        Cookie deleteCookie = new Cookie(REFRESH_TOKEN_COOKIE, "");
+        deleteCookie.setHttpOnly(true);
+        deleteCookie.setSecure(true);
+        deleteCookie.setPath("/");
+        deleteCookie.setMaxAge(0);
+        response.addCookie(deleteCookie);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "회원탈퇴가 완료되었습니다."
+        ));
+    }
+
     private String getRefreshTokenFromCookie(HttpServletRequest request) {
         if (request.getCookies() == null) {
             return null;

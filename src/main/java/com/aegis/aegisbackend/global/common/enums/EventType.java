@@ -1,10 +1,11 @@
 package com.aegis.aegisbackend.global.common.enums;
 
 public enum EventType {
-    ASSAULT("assault"),
-    THEFT("theft"),
-    SUSPICIOUS("suspicious"),
-    NORMAL("normal");
+    ASSAULT("assault"),      // 폭행
+    BURGLARY("burglary"),    // 절도
+    DUMP("dump"),            // 투기
+    SWOON("swoon"),          // 실신
+    VANDALISM("vandalism");  // 파손
 
     private final String value;
 

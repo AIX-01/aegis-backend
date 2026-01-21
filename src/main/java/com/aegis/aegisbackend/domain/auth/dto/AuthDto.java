@@ -52,4 +52,11 @@ public class AuthDto {
         private String currentPassword;
         private String newPassword;
     }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProfileUpdateRequest {
+        private String name;
+    }
 }

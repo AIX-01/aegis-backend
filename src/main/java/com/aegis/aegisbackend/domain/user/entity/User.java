@@ -57,6 +57,14 @@ public class User {
     @Builder.Default
     private Boolean approved = false;
 
+    /** 탈퇴 여부 (소프트 딜리트) */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean deleted = false;
+
+    /** 탈퇴 일시 */
+    private LocalDateTime deletedAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
