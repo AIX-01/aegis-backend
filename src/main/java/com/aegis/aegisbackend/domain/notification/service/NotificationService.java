@@ -1,10 +1,13 @@
 package com.aegis.aegisbackend.domain.notification.service;
 
 import com.aegis.aegisbackend.domain.notification.dto.NotificationDto;
+import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.notification.entity.Notification;
 import com.aegis.aegisbackend.domain.user.entity.User;
+import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.NotificationType;
+import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.AegisException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
@@ -92,6 +95,42 @@ public class NotificationService {
             throw new AegisException(ErrorCode.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.deleteById(notificationId);
+    }
+
+    /** 이벤트 발생 시 관련 사용자들에게 알림 생성 */
+    @Transactional
+    public void createNotificationsForEvent(Event event) {
+        Camera camera = event.getCamera();
+
+        // 해당 카메라에 할당된 사용자들 + Admin 조회
+        List<User> assignedUsers = userRepository.findUsersByCameraId(camera.getId());
+        List<User> admins = userRepository.findByRole(UserRole.ADMIN);
+        assignedUsers.addAll(admins);
+        List<User> uniqueUsers = assignedUsers.stream().distinct().toList();
+
+        // 알림 타입 결정
+        NotificationType notificationType = switch (event.getType()) {
+            case ASSAULT, THEFT -> NotificationType.ALERT;
+            case SUSPICIOUS -> NotificationType.WARNING;
+            case NORMAL -> NotificationType.INFO;
+        };
+
+        String title = getEventTitle(event.getType());
+        String message = String.format("[%s] %s", camera.getAlias(), event.getDescription());
+
+        for (User user : uniqueUsers) {
+            createNotification(user.getId(), event.getId(), notificationType, title, message);
+        }
+        log.info("이벤트 알림 생성 완료: eventId={}, users={}", event.getId(), uniqueUsers.size());
+    }
+
+    private String getEventTitle(EventType type) {
+        return switch (type) {
+            case ASSAULT -> "폭행 감지";
+            case THEFT -> "절도 감지";
+            case SUSPICIOUS -> "의심 행동 감지";
+            case NORMAL -> "정상 활동";
+        };
     }
 
     private NotificationDto toNotificationDto(Notification notification) {

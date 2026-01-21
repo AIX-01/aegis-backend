@@ -19,8 +19,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * MediaMTX Webhook 컨트롤러
@@ -42,6 +42,9 @@ public class WebhookController {
     private final EventRepository eventRepository;
     private final ClipExtractionService clipExtractionService;
     private final NotificationService notificationService;
+
+    // 카메라 이름 → Camera 로컬 캐시 (초당 프레임 처리 시 DB 조회 최소화)
+    private final Map<String, Camera> cameraCache = new ConcurrentHashMap<>();
 
     /**
      * 카메라 동기화 트리거 (단일 엔드포인트)
@@ -69,12 +72,15 @@ public class WebhookController {
             @PathVariable String cameraName,
             @RequestBody byte[] frameData) {
 
-        Optional<Camera> cameraOpt = cameraRepository.findByName(cameraName);
-        if (cameraOpt.isEmpty()) {
+        // 캐시 우선 조회, 미스 시 DB 조회
+        Camera camera = cameraCache.computeIfAbsent(cameraName, name ->
+            cameraRepository.findByName(name).orElse(null)
+        );
+
+        if (camera == null) {
             return ResponseEntity.notFound().build();
         }
 
-        Camera camera = cameraOpt.get();
         if (!camera.getActive()) {
             return ResponseEntity.ok(Map.of("processed", false, "reason", "inactive"));
         }
@@ -82,6 +88,18 @@ public class WebhookController {
         frameBufferService.processFrame(camera.getId(), frameData);
 
         return ResponseEntity.ok(Map.of("processed", true));
+    }
+
+    /** 전체 캐시 무효화 */
+    public void invalidateCameraCache() {
+        cameraCache.clear();
+        log.debug("카메라 캐시 무효화");
+    }
+
+    /** 특정 카메라 캐시 무효화 */
+    public void invalidateCameraCache(String cameraName) {
+        cameraCache.remove(cameraName);
+        log.debug("카메라 캐시 무효화: {}", cameraName);
     }
 
     /**

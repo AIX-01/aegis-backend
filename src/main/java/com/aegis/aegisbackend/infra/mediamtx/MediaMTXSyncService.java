@@ -7,6 +7,7 @@ import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ public class MediaMTXSyncService {
     private final RedisTokenService redisTokenService;
     private final WebClient.Builder webClientBuilder;
     private final SseEmitterService sseEmitterService;
+    private final ApplicationContext applicationContext;
 
     @Value("${mediamtx.api-url}")
     private String mediaMtxApiUrl;
@@ -101,10 +103,17 @@ public class MediaMTXSyncService {
 
             log.info("카메라 동기화 완료: MediaMTX={}, DB={}", mtxCameras.size(), dbCameras.size());
 
-            // 변경사항이 있으면 SSE로 프론트엔드에 카메라 목록 갱신 알림
+            // 변경 시 캐시 무효화 및 SSE 알림
             if (hasChanges) {
+                try {
+                    WebhookController webhookController = applicationContext.getBean(WebhookController.class);
+                    webhookController.invalidateCameraCache();
+                } catch (Exception e) {
+                    log.warn("캐시 무효화 실패: {}", e.getMessage());
+                }
+
                 sseEmitterService.broadcastCameraListRefresh();
-                log.info("카메라 목록 갱신 SSE 브로드캐스트 전송");
+                log.info("카메라 목록 갱신 SSE 전송");
             }
 
         } catch (Exception e) {
