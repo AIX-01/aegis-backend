@@ -57,9 +57,11 @@ public class ClipExtractionService {
      * 이벤트 클립 추출 (비동기)
      * - HLS 세그먼트 파일들을 HTTP로 다운로드하여 클립 생성
      * - MinIO에 저장 후 이벤트 clipUrl 업데이트
+     *
+     * 참고: @Transactional 제거 - 외부 I/O(HTTP, MinIO) 작업 위주이고,
+     * @Async와 함께 사용 시 트랜잭션 컨텍스트가 전파되지 않음
      */
     @Async
-    @Transactional
     public void extractAndSaveClipAsync(UUID cameraId, UUID eventId, int segmentCount) {
         try {
             String clipKey = extractAndSaveClip(cameraId, eventId, segmentCount);
