@@ -37,6 +37,15 @@ public enum ErrorCode {
     // Notification
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
 
+    // S3/Storage
+    S3_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3 업로드에 실패했습니다."),
+    S3_DOWNLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3 다운로드에 실패했습니다."),
+    S3_DELETE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3 삭제에 실패했습니다."),
+
+    // Clip Extraction
+    CLIP_EXTRACTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "클립 추출에 실패했습니다."),
+    CAMERA_NOT_FOUND_FOR_CLIP(HttpStatus.NOT_FOUND, "클립 추출을 위한 카메라를 찾을 수 없습니다."),
+
     // General
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
