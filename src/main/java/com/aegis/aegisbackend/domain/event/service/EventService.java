@@ -8,7 +8,6 @@ import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
-import com.aegis.aegisbackend.global.common.enums.NotificationType;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
@@ -108,7 +107,7 @@ public class EventService {
         }
 
         // 이벤트 발생 시 관련 사용자들에게 알림 생성
-        createNotificationsForEvent(savedEvent);
+        notificationService.createNotificationsForEvent(savedEvent);
 
         // SSE로 이벤트 생성 브로드캐스트
         EventDto eventDto = toEventDto(savedEvent);
@@ -133,56 +132,6 @@ public class EventService {
         return eventDto;
     }
 
-    /**
-     * 이벤트 발생 시 관련 사용자들에게 알림 생성
-     */
-    private void createNotificationsForEvent(Event event) {
-        Camera camera = event.getCamera();
-
-        // 해당 카메라에 할당된 사용자들 조회
-        List<User> assignedUsers = userRepository.findUsersByCameraId(camera.getId());
-
-        // Admin 사용자들 추가
-        List<User> admins = userRepository.findByRole(UserRole.ADMIN);
-
-        // 중복 제거
-        assignedUsers.addAll(admins);
-        List<User> uniqueUsers = assignedUsers.stream().distinct().toList();
-
-        // 알림 타입 결정
-        NotificationType notificationType = switch (event.getType()) {
-            case ASSAULT, BURGLARY -> NotificationType.ALERT;
-            case DUMP, SWOON, VANDALISM -> NotificationType.WARNING;
-        };
-
-        // 알림 제목 및 메시지 생성
-        String title = getEventTitle(event.getType());
-        String message = String.format("[%s] %s", camera.getAlias(), event.getDescription());
-
-        // 각 사용자에게 알림 생성
-        for (User user : uniqueUsers) {
-            notificationService.createNotification(
-                    user.getId(),
-                    event.getId(),
-                    notificationType,
-                    title,
-                    message
-            );
-        }
-
-        log.info("Created {} notifications for event: {}", uniqueUsers.size(), event.getId());
-    }
-
-    private String getEventTitle(EventType type) {
-        return switch (type) {
-            case ASSAULT -> "폭행 감지";
-            case BURGLARY -> "절도 감지";
-            case DUMP -> "투기 감지";
-            case SWOON -> "실신 감지";
-            case VANDALISM -> "파손 감지";
-        };
-    }
-
     private EventDto toEventDto(Event event) {
         return EventDto.builder()
                 .id(event.getId().toString())
@@ -199,4 +148,3 @@ public class EventService {
                 .build();
     }
 }
-
