@@ -27,14 +27,14 @@ import java.util.UUID;
 
 
 /**
- * Agent 웹훅 컨트롤러 (내부망 전용)
- * - 클립 추출: POST /internal/webhooks/agent/clips
- * - 이벤트 생성: POST /internal/webhooks/agent/events
- * - 분석 결과 추가: PATCH /internal/webhooks/agent/events/{id}/analysis
+ * Agent 컨트롤러 (내부망 전용)
+ * - 클립 추출: POST /internal/agent/clips
+ * - 이벤트 생성: POST /internal/agent/events
+ * - 분석 결과 추가: PATCH /internal/agent/events/{id}/analysis
  */
 @Slf4j
 @RestController
-@RequestMapping("/internal/webhooks/agent")
+@RequestMapping("/internal/agent")
 @RequiredArgsConstructor
 public class AgentWebhookController {
 

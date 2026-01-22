@@ -16,14 +16,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * MediaMTX Webhook 컨트롤러 (내부망 전용)
+ * MediaMTX 컨트롤러 (내부망 전용)
  * - 카메라 추가/삭제 알림 수신 → 동기화 트리거
  * - 스트림 인증 검증
  * - 프레임 수신
  */
 @Slf4j
 @RestController
-@RequestMapping("/internal/webhooks/mediamtx")
+@RequestMapping("/internal/mediamtx")
 @RequiredArgsConstructor
 public class MediaMTXWebhookController {
 
