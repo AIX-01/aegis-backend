@@ -91,12 +91,10 @@ public class StreamService {
                 throw new BusinessException(ErrorCode.CAMERA_ACCESS_DENIED);
             }
         }
-        // 카메라 상태 확인
+        // 카메라 연결 상태 확인
         if (!camera.getConnected()) {
             throw new BusinessException(ErrorCode.CAMERA_NOT_CONNECTED);
         }
-        if (!camera.getActive()) {
-            throw new BusinessException(ErrorCode.CAMERA_NOT_ACTIVE);
-        }
+        // active는 AI 분석 활성화 여부이므로 스트림 시청과 무관
     }
 }
