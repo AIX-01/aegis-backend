@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.ai.dto;
+package com.aegis.aegisbackend.infra.agent.dto;
 
 import lombok.Data;
 

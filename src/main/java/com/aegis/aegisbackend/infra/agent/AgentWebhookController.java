@@ -1,4 +1,4 @@
-package com.aegis.aegisbackend.infra.ai;
+package com.aegis.aegisbackend.infra.agent;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
@@ -11,9 +11,9 @@ import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
-import com.aegis.aegisbackend.infra.ai.dto.AnalysisResultRequest;
-import com.aegis.aegisbackend.infra.ai.dto.ClipRequest;
-import com.aegis.aegisbackend.infra.ai.dto.CreateEventRequest;
+import com.aegis.aegisbackend.infra.agent.dto.AnalysisResultRequest;
+import com.aegis.aegisbackend.infra.agent.dto.ClipRequest;
+import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
 import com.aegis.aegisbackend.infra.mediamtx.ClipExtractionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,16 +27,16 @@ import java.util.UUID;
 
 
 /**
- * AI 백엔드 웹훅 컨트롤러 (내부망 전용)
- * - 클립 추출: POST /internal/webhooks/ai/clips
- * - 이벤트 생성: POST /internal/webhooks/ai/events
- * - 분석 결과 추가: PATCH /internal/webhooks/ai/events/{id}/analysis
+ * Agent 웹훅 컨트롤러 (내부망 전용)
+ * - 클립 추출: POST /internal/webhooks/agent/clips
+ * - 이벤트 생성: POST /internal/webhooks/agent/events
+ * - 분석 결과 추가: PATCH /internal/webhooks/agent/events/{id}/analysis
  */
 @Slf4j
 @RestController
-@RequestMapping("/internal/webhooks/ai")
+@RequestMapping("/internal/webhooks/agent")
 @RequiredArgsConstructor
-public class AiWebhookController {
+public class AgentWebhookController {
 
     private final ClipExtractionService clipExtractionService;
     private final CameraRepository cameraRepository;
@@ -138,8 +138,8 @@ public class AiWebhookController {
     }
 
     /**
-     * AI 분석 결과 추가
-     * - 이벤트에 AI 분석 결과 업데이트
+     * Agent 분석 결과 추가
+     * - 이벤트에 분석 결과 업데이트
      * - 상태를 RESOLVED로 변경
      */
     @PatchMapping("/events/{eventId}/analysis")
@@ -153,7 +153,7 @@ public class AiWebhookController {
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
             // 분석 결과 업데이트
-            event.setAiAction(request.getAiAction());
+            event.setAgentAction(request.getAgentAction());
             event.setSummary(request.getSummary());
             event.setAnalysisReport(request.getAnalysisReport());
             event.setStatus(EventStatus.RESOLVED);
@@ -190,7 +190,7 @@ public class AiWebhookController {
                 .timestamp(event.getTimestamp().toString())
                 .status(event.getStatus().getValue())
                 .description(event.getDescription())
-                .aiAction(event.getAiAction())
+                .agentAction(event.getAgentAction())
                 .clipUrl(event.getClipUrl())
                 .summary(event.getSummary())
                 .analysisReport(event.getAnalysisReport())

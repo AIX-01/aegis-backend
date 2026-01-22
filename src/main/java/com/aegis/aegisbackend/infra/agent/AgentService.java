@@ -1,6 +1,6 @@
-package com.aegis.aegisbackend.infra.ai;
+package com.aegis.aegisbackend.infra.agent;
 
-import com.aegis.aegisbackend.infra.ai.dto.AiAnalysisRequest;
+import com.aegis.aegisbackend.infra.agent.dto.AgentAnalysisRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,29 +13,29 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * AI 서비스
- * - 8프레임 버퍼를 AI 백엔드(Python)에 비동기 전송
+ * Agent 서비스
+ * - 8프레임 버퍼를 Agent 백엔드(Python)에 비동기 전송
  * - 응답을 기다리지 않음 (fire-and-forget)
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AiService {
+public class AgentService {
 
     private final WebClient.Builder webClientBuilder;
 
-    @Value("${ai.api-url:http://localhost:8001}")
-    private String aiApiUrl;
+    @Value("${agent.api-url:http://localhost:8001}")
+    private String agentApiUrl;
 
-    @Value("${ai.enabled:false}")
-    private boolean aiEnabled;
+    @Value("${agent.enabled:false}")
+    private boolean agentEnabled;
 
-    @Value("${ai.timeout-seconds:30}")
+    @Value("${agent.timeout-seconds:30}")
     private int timeoutSeconds;
 
     /**
-     * 프레임 버퍼를 AI 백엔드에 비동기 전송 (fire-and-forget)
-     * - 8장의 프레임을 AI 백엔드에 전송
+     * 프레임 버퍼를 Agent 백엔드에 비동기 전송 (fire-and-forget)
+     * - 8장의 프레임을 Agent 백엔드에 전송
      * - 응답을 기다리지 않음
      *
      * @param cameraId 카메라 ID
@@ -43,48 +43,48 @@ public class AiService {
      */
     @Async
     public void sendFramesAsync(UUID cameraId, List<String> frames) {
-        if (!aiEnabled) {
-            log.debug("AI 비활성화 상태 - cameraId={}", cameraId);
+        if (!agentEnabled) {
+            log.debug("Agent 비활성화 상태 - cameraId={}", cameraId);
             return;
         }
 
-        log.info("AI 분석 요청 전송 - cameraId={}, frames={}", cameraId, frames.size());
+        log.info("Agent 분석 요청 전송 - cameraId={}, frames={}", cameraId, frames.size());
 
         try {
-            AiAnalysisRequest request = AiAnalysisRequest.builder()
+            AgentAnalysisRequest request = AgentAnalysisRequest.builder()
                     .cameraId(cameraId)
                     .frames(frames)
                     .build();
 
             webClientBuilder.build()
                     .post()
-                    .uri(aiApiUrl + "/analyze")
+                    .uri(agentApiUrl + "/analyze")
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .subscribe(
-                            response -> log.debug("AI 응답 수신: cameraId={}", cameraId),
-                            error -> log.warn("AI 요청 실패: cameraId={}, error={}", cameraId, error.getMessage())
+                            response -> log.debug("Agent 응답 수신: cameraId={}", cameraId),
+                            error -> log.warn("Agent 요청 실패: cameraId={}, error={}", cameraId, error.getMessage())
                     );
 
         } catch (Exception e) {
-            log.error("AI 요청 전송 실패 - cameraId={}, error={}", cameraId, e.getMessage());
+            log.error("Agent 요청 전송 실패 - cameraId={}, error={}", cameraId, e.getMessage());
         }
     }
 
     /**
-     * AI 서버 상태 확인
+     * Agent 서버 상태 확인
      */
-    public boolean isAiServerHealthy() {
-        if (!aiEnabled) {
+    public boolean isAgentServerHealthy() {
+        if (!agentEnabled) {
             return false;
         }
 
         try {
             String response = webClientBuilder.build()
                     .get()
-                    .uri(aiApiUrl + "/health")
+                    .uri(agentApiUrl + "/health")
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
@@ -92,7 +92,7 @@ public class AiService {
 
             return response != null;
         } catch (Exception e) {
-            log.warn("AI 서버 헬스체크 실패 - url={}, error={}", aiApiUrl, e.getMessage());
+            log.warn("Agent 서버 헬스체크 실패 - url={}, error={}", agentApiUrl, e.getMessage());
             return false;
         }
     }

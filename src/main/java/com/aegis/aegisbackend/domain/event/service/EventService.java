@@ -91,7 +91,7 @@ public class EventService {
                 .timestamp(LocalDateTime.parse(request.getTimestamp()))
                 .status(EventStatus.PROCESSING)
                 .description(request.getDescription())
-                .aiAction(request.getAiAction())
+                .agentAction(request.getAgentAction())
                 .summary(request.getSummary())
                 .analysisReport(request.getAnalysisReport())
                 .build();
@@ -141,7 +141,7 @@ public class EventService {
                 .timestamp(event.getTimestamp().toString())
                 .status(event.getStatus().getValue())
                 .description(event.getDescription())
-                .aiAction(event.getAiAction())
+                .agentAction(event.getAgentAction())
                 .clipUrl(event.getClipUrl())
                 .summary(event.getSummary())
                 .analysisReport(event.getAnalysisReport())
