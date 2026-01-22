@@ -34,7 +34,7 @@ public class StreamService {
     private final UserCameraRepository userCameraRepository;
     private final RedisTokenService redisTokenService;
 
-    @Value("${mediamtx.webrtc-url:http://localhost:8889}")
+    @Value("${mediamtx.webrtc-url:/stream}")
     private String webrtcBaseUrl;
 
     /** 스트림 접근 토큰 발급 */
@@ -48,6 +48,7 @@ public class StreamService {
         validateAccess(user, camera, cameraId);
 
         String token = redisTokenService.generateStreamToken(userId, cameraId);
+        // Caddy 프록시 경로: /stream/cam/whep
         String streamUrl = webrtcBaseUrl + "/" + camera.getName() + "/whep";
 
         log.info("스트림 접근 허용: userId={}, cameraId={}", userId, cameraId);
