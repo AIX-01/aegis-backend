@@ -116,10 +116,4 @@ public class MediaMTXWebhookController {
         cameraCache.clear();
         log.debug("카메라 캐시 무효화");
     }
-
-    /** 특정 카메라 캐시 무효화 */
-    public void invalidateCameraCache(String cameraName) {
-        cameraCache.remove(cameraName);
-        log.debug("카메라 캐시 무효화: {}", cameraName);
-    }
 }
