@@ -106,7 +106,7 @@ public class MediaMTXSyncService {
             // 변경 시 캐시 무효화 및 SSE 알림
             if (hasChanges) {
                 try {
-                    WebhookController webhookController = applicationContext.getBean(WebhookController.class);
+                    MediaMTXWebhookController webhookController = applicationContext.getBean(MediaMTXWebhookController.class);
                     webhookController.invalidateCameraCache();
                 } catch (Exception e) {
                     log.warn("캐시 무효화 실패: {}", e.getMessage());

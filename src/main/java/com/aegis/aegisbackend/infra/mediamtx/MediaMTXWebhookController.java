@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RestController
 @RequestMapping("/internal/webhooks/mediamtx")
 @RequiredArgsConstructor
-public class WebhookController {
+public class MediaMTXWebhookController {
 
     private final MediaMTXSyncService mediaMTXSyncService;
     private final StreamService streamService;
