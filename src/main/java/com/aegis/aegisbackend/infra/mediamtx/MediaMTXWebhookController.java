@@ -49,17 +49,25 @@ public class MediaMTXWebhookController {
     /** 스트림 인증 검증 */
     @PostMapping("/auth")
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
-        log.info("MediaMTX 인증 요청: user={}, path={}, action={}, query={}, jwt={}",
-                request.getUser(), request.getPath(), request.getAction(), request.getQuery(),
-                request.getJwt() != null ? request.getJwt().substring(0, Math.min(20, request.getJwt().length())) + "..." : null);
+        String path = request.getPath();
+        String token = null;
+        String actualPath = path;
 
-        // jwt 필드, user 필드, query에서 토큰 추출 (우선순위: jwt > user > query)
-        String token = request.getJwt();
+        // path에서 토큰 추출 (cam__token 형식)
+        if (path != null && path.contains("__")) {
+            String[] parts = path.split("__", 2);
+            actualPath = parts[0];
+            token = parts[1];
+        }
+
+        // 토큰이 path에 없으면 다른 필드에서 추출
+        if (token == null || token.isEmpty()) {
+            token = request.getJwt();
+        }
         if (token == null || token.isEmpty()) {
             token = request.getUser();
         }
         if ((token == null || token.isEmpty()) && request.getQuery() != null) {
-            // query에서 user= 파라미터 추출
             for (String param : request.getQuery().split("&")) {
                 if (param.startsWith("user=")) {
                     token = param.substring(5);
@@ -68,7 +76,11 @@ public class MediaMTXWebhookController {
             }
         }
 
-        boolean valid = streamService.validateStreamAuth(token, request.getPath(), request.getAction());
+        log.info("MediaMTX 인증 요청: path={}, actualPath={}, action={}, token={}",
+                path, actualPath, request.getAction(),
+                token != null ? token.substring(0, Math.min(8, token.length())) + "..." : null);
+
+        boolean valid = streamService.validateStreamAuth(token, actualPath, request.getAction());
         return valid ? ResponseEntity.ok().build()
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
