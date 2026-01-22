@@ -17,7 +17,7 @@ public class EventDto {
     private String timestamp;
     private String status; // "processing" | "resolved"
     private String description;
-    private String aiAction;
+    private String agentAction;
     private String clipUrl;
     private String summary;
     private String analysisReport;
@@ -30,7 +30,7 @@ public class EventDto {
         private String type;
         private String timestamp;
         private String description;
-        private String aiAction;
+        private String agentAction;
         private String summary;
         private String analysisReport;
         private byte[] clipData;
