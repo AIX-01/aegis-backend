@@ -77,8 +77,29 @@ public class S3Service {
     }
 
     /**
-     * 이벤트 클립 다운로드
+     * 클립 다운로드 (키 직접 지정)
      */
+    public byte[] downloadClip(String key) {
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build();
+
+            return s3Client.getObjectAsBytes(request).asByteArray();
+        } catch (NoSuchKeyException e) {
+            log.warn("Clip not found: {}", key);
+            return null;
+        } catch (S3Exception e) {
+            log.error("Failed to download clip {}: {}", key, e.getMessage());
+            throw new BusinessException(ErrorCode.S3_DOWNLOAD_FAILED);
+        }
+    }
+
+    /**
+     * 이벤트 클립 다운로드 (deprecated - 대신 downloadClip 사용)
+     */
+    @Deprecated
     public byte[] downloadEventClip(UUID eventId) {
         String key = buildEventClipKey(eventId);
 
