@@ -49,8 +49,22 @@ public class MediaMTXWebhookController {
     /** 스트림 인증 검증 */
     @PostMapping("/auth")
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
-        boolean valid = streamService.validateStreamAuth(
-                request.getUser(), request.getPath(), request.getAction());
+        log.info("MediaMTX 인증 요청: user={}, path={}, action={}, query={}",
+                request.getUser(), request.getPath(), request.getAction(), request.getQuery());
+
+        // user 필드 또는 query에서 토큰 추출
+        String token = request.getUser();
+        if ((token == null || token.isEmpty()) && request.getQuery() != null) {
+            // query에서 user= 파라미터 추출
+            for (String param : request.getQuery().split("&")) {
+                if (param.startsWith("user=")) {
+                    token = param.substring(5);
+                    break;
+                }
+            }
+        }
+
+        boolean valid = streamService.validateStreamAuth(token, request.getPath(), request.getAction());
         return valid ? ResponseEntity.ok().build()
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
