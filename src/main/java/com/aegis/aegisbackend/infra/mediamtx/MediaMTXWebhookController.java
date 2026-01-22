@@ -51,21 +51,25 @@ public class MediaMTXWebhookController {
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
         String path = request.getPath();
         String query = request.getQuery();
-        String token = null;
 
-        // query에서 token= 파라미터 추출
-        if (query != null && !query.isEmpty()) {
-            for (String param : query.split("&")) {
-                if (param.startsWith("token=")) {
-                    token = param.substring(6);
-                    break;
+        // 토큰 추출 우선순위: jwt (Authorization 헤더) > query parameter
+        String token = request.getJwt();
+        if (token == null || token.isEmpty()) {
+            // query에서 token= 파라미터 추출 (fallback)
+            if (query != null && !query.isEmpty()) {
+                for (String param : query.split("&")) {
+                    if (param.startsWith("token=")) {
+                        token = param.substring(6);
+                        break;
+                    }
                 }
             }
         }
 
-        log.info("MediaMTX 인증 요청: path={}, action={}, token={}",
+        log.info("MediaMTX 인증 요청: path={}, action={}, jwt={}, query={}",
                 path, request.getAction(),
-                token != null ? token.substring(0, Math.min(8, token.length())) + "..." : "null");
+                request.getJwt() != null ? "있음" : "없음",
+                query);
 
         boolean valid = streamService.validateStreamAuth(token, path, request.getAction());
         return valid ? ResponseEntity.ok().build()
