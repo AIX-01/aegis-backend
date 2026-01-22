@@ -51,11 +51,25 @@ public class MediaMTXWebhookController {
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
         String path = request.getPath();
         String query = request.getQuery();
+        String action = request.getAction();
+        String protocol = request.getProtocol();
 
-        // 토큰 추출 우선순위: jwt (Authorization 헤더) > query parameter
+        // publish 액션은 MediaMTX 내부 인증 사용 (authInternalUsers)
+        if ("publish".equals(action)) {
+            log.debug("MediaMTX publish 인증: path={}, 내부 인증 사용", path);
+            return ResponseEntity.ok().build();
+        }
+
+        // 내부 프로토콜(rtsp, hls)은 인증 없이 통과 (MediaMTX 내부 사용)
+        if ("rtsp".equals(protocol) || "hls".equals(protocol)) {
+            log.debug("MediaMTX 내부 프로토콜 인증: path={}, protocol={}, 통과", path, protocol);
+            return ResponseEntity.ok().build();
+        }
+
+        // WebRTC read 요청만 토큰 검증
         String token = request.getJwt();
         if (token == null || token.isEmpty()) {
-            // query에서 token= 파라미터 추출 (fallback)
+            // query에서 token= 파라미터 추출
             if (query != null && !query.isEmpty()) {
                 for (String param : query.split("&")) {
                     if (param.startsWith("token=")) {
@@ -66,12 +80,11 @@ public class MediaMTXWebhookController {
             }
         }
 
-        log.info("MediaMTX 인증 요청: path={}, action={}, jwt={}, query={}",
-                path, request.getAction(),
-                request.getJwt() != null ? "있음" : "없음",
-                query);
+        log.info("MediaMTX 인증 요청: path={}, action={}, protocol={}, token={}",
+                path, action, protocol,
+                token != null ? "있음" : "없음");
 
-        boolean valid = streamService.validateStreamAuth(token, path, request.getAction());
+        boolean valid = streamService.validateStreamAuth(token, path, action);
         return valid ? ResponseEntity.ok().build()
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
