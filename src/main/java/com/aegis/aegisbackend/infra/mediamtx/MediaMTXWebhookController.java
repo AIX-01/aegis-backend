@@ -49,11 +49,15 @@ public class MediaMTXWebhookController {
     /** 스트림 인증 검증 */
     @PostMapping("/auth")
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
-        log.info("MediaMTX 인증 요청: user={}, path={}, action={}, query={}",
-                request.getUser(), request.getPath(), request.getAction(), request.getQuery());
+        log.info("MediaMTX 인증 요청: user={}, path={}, action={}, query={}, jwt={}",
+                request.getUser(), request.getPath(), request.getAction(), request.getQuery(),
+                request.getJwt() != null ? request.getJwt().substring(0, Math.min(20, request.getJwt().length())) + "..." : null);
 
-        // user 필드 또는 query에서 토큰 추출
-        String token = request.getUser();
+        // jwt 필드, user 필드, query에서 토큰 추출 (우선순위: jwt > user > query)
+        String token = request.getJwt();
+        if (token == null || token.isEmpty()) {
+            token = request.getUser();
+        }
         if ((token == null || token.isEmpty()) && request.getQuery() != null) {
             // query에서 user= 파라미터 추출
             for (String param : request.getQuery().split("&")) {

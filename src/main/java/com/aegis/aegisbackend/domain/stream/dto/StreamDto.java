@@ -22,13 +22,14 @@ public class StreamDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MediaMTXAuthRequest {
-        private String user;        // 토큰 (클라이언트가 전달)
-        private String password;    // 빈 값
+        private String user;        // 사용자 (Basic Auth)
+        private String password;    // 비밀번호 (Basic Auth)
         private String ip;          // 클라이언트 IP
         private String action;      // "read" 또는 "publish"
         private String path;        // 카메라 경로 (스트림 이름)
         private String protocol;    // "webrtc", "hls", "rtsp" 등
         private String id;          // 연결 ID
         private String query;       // 쿼리 스트링
+        private String jwt;         // JWT 토큰 (Authorization: Bearer 헤더)
     }
 }
