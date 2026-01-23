@@ -28,6 +28,7 @@ import java.util.UUID;
 
 /**
  * Agent 컨트롤러 (내부망 전용)
+ * - 분석 대상 카메라 조회: GET /internal/agent/cameras/analysis
  * - 클립 추출: POST /internal/agent/clips
  * - 이벤트 생성: POST /internal/agent/events
  * - 분석 결과 추가: PATCH /internal/agent/events/{id}/analysis
@@ -43,6 +44,28 @@ public class AgentWebhookController {
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
+
+    /**
+     * 분석 대상 카메라 목록 조회
+     * - Python Agent가 Redis Pub/Sub 수신 후 호출
+     * - enabled=true && analysisEnabled=true인 카메라만 반환
+     */
+    @GetMapping("/cameras/analysis")
+    public ResponseEntity<?> getAnalysisCameras() {
+        log.debug("분석 대상 카메라 목록 조회");
+
+        var cameras = cameraRepository.findAll().stream()
+                .filter(c -> Boolean.TRUE.equals(c.getEnabled()) && Boolean.TRUE.equals(c.getAnalysisEnabled()))
+                .map(c -> Map.of(
+                        "id", c.getId().toString(),
+                        "name", c.getName(),
+                        "enabled", c.getEnabled(),
+                        "analysisEnabled", c.getAnalysisEnabled()
+                ))
+                .toList();
+
+        return ResponseEntity.ok(Map.of("cameras", cameras));
+    }
 
     /**
      * 클립 추출 (이벤트 없이)

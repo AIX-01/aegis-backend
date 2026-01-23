@@ -7,7 +7,6 @@ import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +23,7 @@ import java.util.stream.Collectors;
  * - 새 카메라는 비활성화 상태로 추가
  * - 연결 해제된 카메라는 오프라인 처리
  * - 동기화 완료 시 SSE로 프론트엔드에 알림
+ * - Redis Pub/Sub으로 Python Agent에 알림
  */
 @Slf4j
 @Service
@@ -34,7 +34,6 @@ public class MediaMTXSyncService {
     private final RedisTokenService redisTokenService;
     private final WebClient.Builder webClientBuilder;
     private final SseEmitterService sseEmitterService;
-    private final ApplicationContext applicationContext;
 
     @Value("${mediamtx.api-url}")
     private String mediaMtxApiUrl;
@@ -104,17 +103,11 @@ public class MediaMTXSyncService {
 
             log.info("카메라 동기화 완료: MediaMTX={}, DB={}", mtxCameras.size(), dbCameras.size());
 
-            // 변경 시 캐시 무효화 및 SSE 알림
+            // 변경 시 SSE 알림 및 Redis Pub/Sub 발행
             if (hasChanges) {
-                try {
-                    MediaMTXWebhookController webhookController = applicationContext.getBean(MediaMTXWebhookController.class);
-                    webhookController.invalidateCameraCache();
-                } catch (Exception e) {
-                    log.warn("캐시 무효화 실패: {}", e.getMessage());
-                }
-
                 sseEmitterService.broadcastCamera("refresh");
-                log.info("카메라 목록 갱신 SSE 전송");
+                redisTokenService.publishCameraAnalysisUpdate();
+                log.info("카메라 목록 갱신 SSE 및 Pub/Sub 전송");
             }
 
         } catch (Exception e) {

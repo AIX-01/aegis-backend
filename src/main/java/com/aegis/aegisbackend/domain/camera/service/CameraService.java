@@ -10,6 +10,7 @@ import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
 import com.aegis.aegisbackend.domain.user.repository.UserRepository;
+import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.util.UUID;
  * - 카메라 목록 조회 (권한에 따라)
  * - 카메라 정보 수정 (별칭, 활성화)
  * - 카메라 변경 시 SSE로 실시간 알림
+ * - 분석 상태 변경 시 Redis Pub/Sub 발행
  */
 @Slf4j
 @Service
@@ -34,6 +36,7 @@ public class CameraService {
     private final UserRepository userRepository;
     private final UserCameraRepository userCameraRepository;
     private final SseEmitterService sseEmitterService;
+    private final RedisTokenService redisTokenService;
 
     @Transactional(readOnly = true)
     public List<CameraDto> getAllCameras(UUID userId) {
@@ -66,25 +69,41 @@ public class CameraService {
         Camera camera = cameraRepository.findById(cameraId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
+        boolean analysisStateChanged = false;
+
         if (request.getAlias() != null) {
             camera.setAlias(request.getAlias());
         }
         if (request.getEnabled() != null) {
+            boolean wasAnalysisEnabled = camera.getEnabled() && camera.getAnalysisEnabled();
             camera.setEnabled(request.getEnabled());
             // enabled=false면 analysisEnabled도 false로 (Option A: 계층적 구조)
             if (!request.getEnabled()) {
                 camera.setAnalysisEnabled(false);
             }
+            boolean isAnalysisEnabled = camera.getEnabled() && camera.getAnalysisEnabled();
+            if (wasAnalysisEnabled != isAnalysisEnabled) {
+                analysisStateChanged = true;
+            }
         }
         if (request.getAnalysisEnabled() != null) {
             // enabled=true일 때만 analysisEnabled 변경 가능
             if (camera.getEnabled()) {
+                boolean wasAnalysisEnabled = camera.getAnalysisEnabled();
                 camera.setAnalysisEnabled(request.getAnalysisEnabled());
+                if (wasAnalysisEnabled != request.getAnalysisEnabled()) {
+                    analysisStateChanged = true;
+                }
             }
         }
 
         cameraRepository.save(camera);
         log.info("카메라 수정: {}", cameraId);
+
+        // 분석 상태가 변경된 경우 Redis Pub/Sub 발행 (Python Agent에게 알림)
+        if (analysisStateChanged) {
+            redisTokenService.publishCameraAnalysisUpdate();
+        }
 
         // SSE로 카메라 업데이트 브로드캐스트
         CameraDto updatedDto = toDto(camera);

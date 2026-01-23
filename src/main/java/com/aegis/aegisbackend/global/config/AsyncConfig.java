@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * 비동기 및 스케줄링 설정
  * - @EnableAsync: 비동기 메서드 실행 지원
- * - @EnableScheduling: @Scheduled 어노테이션 지원 (FrameBufferService 타임아웃 등)
+ * - @EnableScheduling: @Scheduled 어노테이션 지원
  */
 @Configuration
 @EnableAsync

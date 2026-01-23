@@ -1,25 +1,19 @@
 package com.aegis.aegisbackend.infra.mediamtx;
 
-import com.aegis.aegisbackend.domain.camera.entity.Camera;
-import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.stream.dto.StreamDto.MediaMTXAuthRequest;
-import com.aegis.aegisbackend.domain.stream.service.FrameBufferService;
 import com.aegis.aegisbackend.domain.stream.service.StreamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * MediaMTX 컨트롤러 (내부망 전용)
  * - 카메라 추가/삭제 알림 수신 → 동기화 트리거
  * - 스트림 인증 검증
- * - 프레임 수신
  */
 @Slf4j
 @RestController
@@ -29,11 +23,6 @@ public class MediaMTXWebhookController {
 
     private final MediaMTXSyncService mediaMTXSyncService;
     private final StreamService streamService;
-    private final FrameBufferService frameBufferService;
-    private final CameraRepository cameraRepository;
-
-    // 카메라 이름 → Camera 로컬 캐시 (초당 프레임 처리 시 DB 조회 최소화)
-    private final Map<String, Camera> cameraCache = new ConcurrentHashMap<>();
 
     /**
      * 카메라 동기화 트리거 (단일 엔드포인트)
@@ -87,34 +76,5 @@ public class MediaMTXWebhookController {
         boolean valid = streamService.validateStreamAuth(token, path, action);
         return valid ? ResponseEntity.ok().build()
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-    }
-
-    /** 프레임 수신 (AI 버퍼: enabled && analysisEnabled인 카메라만) */
-    @PostMapping(value = "/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public ResponseEntity<?> receiveFrame(
-            @PathVariable String cameraName,
-            @RequestBody byte[] frameData) {
-
-        // 캐시 우선 조회, 미스 시 DB 조회
-        Camera camera = cameraCache.computeIfAbsent(cameraName, name ->
-            cameraRepository.findByName(name).orElse(null)
-        );
-
-        // DB 미등록 카메라는 거부
-        if (camera == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        // AI 버퍼는 enabled && analysisEnabled인 카메라만
-        boolean shouldAnalyze = camera.getEnabled() && camera.getAnalysisEnabled();
-        frameBufferService.processFrame(camera.getId(), frameData, shouldAnalyze);
-
-        return ResponseEntity.ok(Map.of("processed", true, "analysisEnabled", shouldAnalyze));
-    }
-
-    /** 전체 캐시 무효화 */
-    public void invalidateCameraCache() {
-        cameraCache.clear();
-        log.debug("카메라 캐시 무효화");
     }
 }

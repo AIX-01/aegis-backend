@@ -1,6 +1,7 @@
 package com.aegis.aegisbackend.infra.redis;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +13,9 @@ import java.util.concurrent.TimeUnit;
  * - Refresh Token: 7일 TTL
  * - Stream Token: 30초 TTL (일회용)
  * - MediaMTX 동기화 잠금: 1초 TTL
+ * - Camera Analysis Pub/Sub: 카메라 분석 상태 변경 알림
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedisTokenService {
@@ -22,6 +25,7 @@ public class RedisTokenService {
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
     private static final String STREAM_TOKEN_PREFIX = "stream_token:";
     private static final String SYNC_LOCK_KEY = "mediamtx:sync:lock";
+    private static final String CAMERA_ANALYSIS_CHANNEL = "camera:analysis:update";
 
     // === Refresh Token ===
 
@@ -80,5 +84,16 @@ public class RedisTokenService {
 
     public boolean isSyncLocked() {
         return Boolean.TRUE.equals(redisTemplate.hasKey(SYNC_LOCK_KEY));
+    }
+
+    // === Camera Analysis Pub/Sub ===
+
+    /**
+     * 카메라 분석 상태 변경 알림 발행
+     * Python Agent가 이 채널을 구독하여 분석 대상 카메라 목록을 갱신
+     */
+    public void publishCameraAnalysisUpdate() {
+        redisTemplate.convertAndSend(CAMERA_ANALYSIS_CHANNEL, "update");
+        log.info("카메라 분석 상태 변경 알림 발행: channel={}", CAMERA_ANALYSIS_CHANNEL);
     }
 }
