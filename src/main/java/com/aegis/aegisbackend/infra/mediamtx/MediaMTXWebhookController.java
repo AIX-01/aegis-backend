@@ -89,7 +89,7 @@ public class MediaMTXWebhookController {
                 : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
-    /** 프레임 수신 (썸네일: 항상, AI 버퍼: 활성 카메라만) */
+    /** 프레임 수신 (AI 버퍼: enabled && analysisEnabled인 카메라만) */
     @PostMapping(value = "/frame/{cameraName}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<?> receiveFrame(
             @PathVariable String cameraName,
@@ -105,10 +105,11 @@ public class MediaMTXWebhookController {
             return ResponseEntity.notFound().build();
         }
 
-        // 썸네일은 항상 저장, AI 버퍼는 active=true만
-        frameBufferService.processFrame(camera.getId(), frameData, camera.getActive());
+        // AI 버퍼는 enabled && analysisEnabled인 카메라만
+        boolean shouldAnalyze = camera.getEnabled() && camera.getAnalysisEnabled();
+        frameBufferService.processFrame(camera.getId(), frameData, shouldAnalyze);
 
-        return ResponseEntity.ok(Map.of("processed", true, "aiEnabled", camera.getActive()));
+        return ResponseEntity.ok(Map.of("processed", true, "analysisEnabled", shouldAnalyze));
     }
 
     /** 전체 캐시 무효화 */

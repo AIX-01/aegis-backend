@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,7 +44,14 @@ public class CameraService {
                 ? cameraRepository.findAll()
                 : cameraRepository.findByIdIn(userCameraRepository.findCameraIdsByUserId(userId));
 
-        return cameras.stream().map(this::toDto).toList();
+        // 정렬: 1) connected DESC, 2) enabled DESC, 3) alias ASC
+        return cameras.stream()
+                .sorted(Comparator
+                        .comparing(Camera::getConnected, Comparator.reverseOrder())
+                        .thenComparing(Camera::getEnabled, Comparator.reverseOrder())
+                        .thenComparing(Camera::getAlias, String.CASE_INSENSITIVE_ORDER))
+                .map(this::toDto)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -61,8 +69,18 @@ public class CameraService {
         if (request.getAlias() != null) {
             camera.setAlias(request.getAlias());
         }
-        if (request.getActive() != null) {
-            camera.setActive(request.getActive());
+        if (request.getEnabled() != null) {
+            camera.setEnabled(request.getEnabled());
+            // enabled=false면 analysisEnabled도 false로 (Option A: 계층적 구조)
+            if (!request.getEnabled()) {
+                camera.setAnalysisEnabled(false);
+            }
+        }
+        if (request.getAnalysisEnabled() != null) {
+            // enabled=true일 때만 analysisEnabled 변경 가능
+            if (camera.getEnabled()) {
+                camera.setAnalysisEnabled(request.getAnalysisEnabled());
+            }
         }
 
         cameraRepository.save(camera);
@@ -76,8 +94,8 @@ public class CameraService {
     }
 
     @Transactional(readOnly = true)
-    public long countActiveCameras() {
-        return cameraRepository.findByConnectedAndActive(true, true).size();
+    public long countEnabledCameras() {
+        return cameraRepository.findByConnectedAndEnabled(true, true).size();
     }
 
     @Transactional(readOnly = true)
@@ -91,7 +109,8 @@ public class CameraService {
                 .name(camera.getName())
                 .connected(camera.getConnected())
                 .alias(camera.getAlias())
-                .active(camera.getActive())
+                .enabled(camera.getEnabled())
+                .analysisEnabled(camera.getAnalysisEnabled())
                 .build();
     }
 }

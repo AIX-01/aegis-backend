@@ -18,7 +18,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "cameras", indexes = {
         @Index(name = "idx_cameras_connected", columnList = "connected"),
-        @Index(name = "idx_cameras_active", columnList = "active")
+        @Index(name = "idx_cameras_enabled", columnList = "enabled"),
+        @Index(name = "idx_cameras_analysis_enabled", columnList = "analysis_enabled")
 })
 @Getter
 @Setter
@@ -44,10 +45,15 @@ public class Camera {
     @Column(nullable = false, length = 100)
     private String alias;
 
-    /** 모니터링 활성화 여부 */
+    /** 카메라 활성화 여부 (메인 스위치) */
     @Column(nullable = false)
     @Builder.Default
-    private Boolean active = false;
+    private Boolean enabled = false;
+
+    /** AI 분석 활성화 여부 (enabled=true일 때만 유효) */
+    @Column(name = "analysis_enabled", nullable = false)
+    @Builder.Default
+    private Boolean analysisEnabled = false;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

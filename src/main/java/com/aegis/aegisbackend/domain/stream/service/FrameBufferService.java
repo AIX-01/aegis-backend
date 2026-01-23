@@ -3,18 +3,15 @@ package com.aegis.aegisbackend.domain.stream.service;
 import com.aegis.aegisbackend.infra.agent.AgentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
  * 프레임 버퍼 서비스
- * - 썸네일: Redis 저장 (카메라당 최신 1장, 5초 TTL)
  * - Agent 버퍼: 메모리 저장 (카메라당 8장 수집 후 Agent 백엔드에 전송)
  * - 타임아웃: 3초 이상 프레임이 안 들어오면 버퍼 폐기 (8장 미만은 전송 안함)
  */
@@ -23,11 +20,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FrameBufferService {
 
-    private final RedisTemplate<String, String> redisTemplate;
     private final AgentService agentService;
 
-    private static final String THUMBNAIL_PREFIX = "thumbnail:";
-    private static final int THUMBNAIL_TTL_SECONDS = 3;
     private static final int AGENT_BUFFER_SIZE = 8;
     private static final long BUFFER_TIMEOUT_MS = 3_000;  // 3초 타임아웃
 
@@ -36,13 +30,10 @@ public class FrameBufferService {
     // 카메라별 마지막 프레임 수신 시간
     private final Map<UUID, Long> lastFrameTime = new ConcurrentHashMap<>();
 
-    /** 프레임 수신 처리: 썸네일 저장 + Agent 버퍼 추가 (활성 카메라만) */
-    public void processFrame(UUID cameraId, byte[] frameData, boolean active) {
-        // 썸네일은 항상 저장 (비활성 카메라도)
-        saveThumbnail(cameraId, frameData);
-
-        // Agent 버퍼는 활성 카메라만
-        if (!active) {
+    /** 프레임 수신 처리: Agent 버퍼 추가 (분석 활성화된 카메라만) */
+    public void processFrame(UUID cameraId, byte[] frameData, boolean shouldAnalyze) {
+        // Agent 버퍼는 분석 활성화된 카메라만 (enabled && analysisEnabled)
+        if (!shouldAnalyze) {
             return;
         }
 
@@ -55,10 +46,6 @@ public class FrameBufferService {
         }
     }
 
-    /** Redis에서 썸네일 조회 (Base64) */
-    public String getThumbnail(UUID cameraId) {
-        return redisTemplate.opsForValue().get(THUMBNAIL_PREFIX + cameraId);
-    }
 
     /** 특정 카메라 Agent 버퍼 초기화 */
     public void clearAgentBuffer(UUID cameraId) {
@@ -119,11 +106,6 @@ public class FrameBufferService {
 
     // === Private ===
 
-    private void saveThumbnail(UUID cameraId, byte[] frameData) {
-        String key = THUMBNAIL_PREFIX + cameraId;
-        String base64 = Base64.getEncoder().encodeToString(frameData);
-        redisTemplate.opsForValue().set(key, base64, THUMBNAIL_TTL_SECONDS, TimeUnit.SECONDS);
-    }
 
     private List<byte[]> addToAgentBuffer(UUID cameraId, byte[] frameData) {
         LinkedList<byte[]> buffer = agentBuffers.computeIfAbsent(cameraId, k -> new LinkedList<>());

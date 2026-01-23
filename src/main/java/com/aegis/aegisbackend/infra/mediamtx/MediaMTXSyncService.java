@@ -82,7 +82,8 @@ public class MediaMTXSyncService {
                             .name(name)
                             .alias(name)
                             .connected(true)
-                            .active(false)
+                            .enabled(false)
+                            .analysisEnabled(false)
                             .build();
                     cameraRepository.save(camera);
                     log.info("새 카메라 추가: {}", name);
