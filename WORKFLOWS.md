@@ -130,6 +130,8 @@ flowchart TD
 
     MTX -->|Sync /internal/mediamtx/sync| Backend
     MTX -->|"Frame /frame/name"| Agent
+    Backend -->|"GET /v3/paths/list"| MTX
+    Backend -->|"GET HLS segments"| MTX
     Agent -->|"Webhook /internal/agent/*"| Backend
     Backend -.->|Redis Pub/Sub| Agent
 
@@ -149,8 +151,9 @@ flowchart TD
 4. **원격 MTX → MediaMTX**: SRT (8890/udp)로 영상 스트림 수신
 5. **MediaMTX → Agent**: 프레임 직접 전송 (1fps, Python에서 버퍼링)
 6. **MediaMTX → Backend**: 동기화 웹훅 (카메라 추가/삭제)
-7. **Backend → Agent (Redis Pub/Sub)**: 카메라 분석 상태 변경 알림
-8. **Agent → Backend**: 분석 결과 웹훅 (클립 추출, 이벤트 생성)
+7. **Backend → MediaMTX**: 카메라 목록 조회 (동기화), HLS 세그먼트 다운로드 (클립 추출)
+8. **Backend → Agent (Redis Pub/Sub)**: 카메라 분석 상태 변경 알림
+9. **Agent → Backend**: 분석 결과 웹훅 (클립 추출, 이벤트 생성)
 
 ### 2.2 네트워크 구성
 
