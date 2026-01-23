@@ -264,7 +264,6 @@ localhost:443
 | `refresh_token:{token}` | userId | 7일 | 리프레시 토큰 저장 |
 | `stream_token:{token}` | userId:cameraId | 30초 | 스트림 접근 토큰 (일회용) |
 | `mediamtx:sync:lock` | "locked" | 1초 | 동기화 중복 방지 잠금 |
-| `thumbnail:{cameraId}` | base64 이미지 | 3초 | 썸네일 캐시 |
 
 ### 3.5 MinIO 버킷 구조
 
@@ -328,19 +327,30 @@ files/
 
 #### 4.2.2 Camera 도메인
 
-**역할:** 카메라 CRUD 및 썸네일 제공
+**역할:** 카메라 CRUD 및 스트림 관리
 
 | 클래스 | 역할 |
 |--------|------|
-| `CameraController` | 카메라 목록, 상세, 수정, 썸네일 |
-| `CameraService` | 카메라 조회 (권한별), 수정 시 SSE 브로드캐스트 |
-| `Camera` (Entity) | id, name, alias, connected, active |
+| `CameraController` | 카메라 목록, 상세, 수정, 스트림 토큰 발급 |
+| `CameraService` | 카메라 조회 (권한별, 정렬), 수정 시 SSE 브로드캐스트 |
+| `Camera` (Entity) | id, name, alias, connected, enabled, analysisEnabled |
 | `UserCamera` (Entity) | User-Camera 다대다 매핑 (복합 키) |
 | `CameraDto` | CameraDto, UpdateRequest |
 
 **카메라 상태:**
 - `connected`: MediaMTX 연결 여부 (자동 동기화)
-- `active`: AI 분석 활성화 여부 (사용자 제어)
+- `enabled`: 카메라 활성화 (메인 스위치, 스트림 표시)
+- `analysisEnabled`: AI 분석 활성화 (enabled=true일 때만 유효)
+
+**활성화 구조 (Option A 계층적):**
+- `enabled=false` → 스트림 표시 안 함, `analysisEnabled`도 자동 false
+- `enabled=true, analysisEnabled=false` → 스트림만 표시, AI 분석 안 함
+- `enabled=true, analysisEnabled=true` → 스트림 표시 + AI 분석
+
+**카메라 정렬 순서:**
+1. `connected` DESC (온라인 우선)
+2. `enabled` DESC (활성화 우선)
+3. `alias` ASC (별칭 이름순)
 
 **권한:**
 - ADMIN: 모든 카메라 접근
@@ -418,15 +428,14 @@ files/
 | 클래스 | 역할 |
 |--------|------|
 | `StreamService` | 스트림 토큰 발급, 인증 검증 |
-| `FrameBufferService` | 썸네일 Redis 저장, Agent 버퍼 관리 |
+| `FrameBufferService` | Agent 버퍼 관리 (썸네일 저장 제거됨) |
 | `StreamDto` | StreamAccessResponse, MediaMTXAuthRequest |
 
 **프레임 처리 플로우:**
 1. MediaMTX에서 1fps 프레임 전송
-2. 썸네일: 모든 카메라 → Redis 저장 (3초 TTL)
-3. Agent 버퍼: `active=true` 카메라만 → 메모리 버퍼에 8장 수집
-4. 8장 수집 완료 → AgentService로 전송
-5. 3초 타임아웃 시 버퍼 폐기 (8장 미만은 전송 안 함)
+2. Agent 버퍼: `enabled && analysisEnabled` 카메라만 → 메모리 버퍼에 8장 수집
+3. 8장 수집 완료 → AgentService로 전송
+4. 3초 타임아웃 시 버퍼 폐기 (8장 미만은 전송 안 함)
 
 #### 4.2.7 User 도메인
 
@@ -501,8 +510,7 @@ files/
 **프레임 수신 로직:**
 1. 카메라 이름으로 로컬 캐시 조회 (캐시 미스 시 DB 조회)
 2. DB 미등록 카메라 → 404 반환 (거부)
-3. 썸네일 Redis 저장 (모든 카메라)
-4. Agent 버퍼 추가 (`active=true` 카메라만)
+3. Agent 버퍼 추가 (`active=true` 카메라만)
 
 **클립 추출 로직:**
 1. MediaMTX HLS API에서 m3u8 플레이리스트 파싱
@@ -600,9 +608,8 @@ components/
 │   └── ProtectedRoute.tsx   # 인증 보호 라우트
 ├── dashboard/
 │   ├── DashboardContent.tsx # 대시보드 메인
-│   ├── CCTVGrid.tsx         # 카메라 그리드
-│   ├── CameraThumbnail.tsx  # 썸네일 (클릭 시 스트림)
-│   ├── CameraDetailModal.tsx # 카메라 상세 모달
+│   ├── CCTVGrid.tsx         # 카메라 그리드 (3x3, 페이지네이션)
+│   ├── CameraDetailModal.tsx # 카메라 상세 모달 (enabled + analysisEnabled 스위치)
 │   ├── WebRTCPlayer.tsx     # WebRTC 플레이어
 │   ├── EventLog.tsx         # 실시간 이벤트 로그
 │   ├── EventDetailModal.tsx # 이벤트 상세 모달
@@ -711,7 +718,7 @@ useNotificationStream(
 | 객체 | 메서드 |
 |------|--------|
 | `authApi` | login, signup, logout, refresh, me, changePassword, updateProfile, deleteAccount |
-| `camerasApi` | getAll, getById, update, requestStream, getThumbnail, getThumbnailUrl |
+| `camerasApi` | getAll, getById, update, requestStream |
 | `eventsApi` | getAll, getById, updateStatus, getClipDownloadUrl, getClipStreamUrl, getClipUrl (deprecated) |
 | `notificationsApi` | getAll, getUnreadCount, markAsRead, markAllAsRead, delete |
 | `statsApi` | getDaily, getEventTypes, getMonthly |
@@ -722,8 +729,8 @@ useNotificationStream(
 ```typescript
 // 카메라
 interface Camera { id, name, connected }
-interface ManagedCamera extends Camera { alias, active }
-interface CameraUpdateRequest { alias?, active? }
+interface ManagedCamera extends Camera { alias, enabled, analysisEnabled }
+interface CameraUpdateRequest { alias?, enabled?, analysisEnabled? }
 
 // 이벤트
 interface Event {
@@ -861,7 +868,7 @@ sequenceDiagram
     participant MTX as MediaMTX
 
     Note over B,MTX: 1. 스트림 접근 요청
-    B->>WP: 썸네일 클릭
+    B->>WP: 카메라 선택 (그리드에서 WebRTC 자동 연결)
     WP->>C: POST /api/cameras/{id}/stream
     C->>S: 프록시
     S->>S: 카메라 접근 권한 확인
@@ -992,12 +999,10 @@ flowchart TD
 
 | 엔드포인트 | 메서드 | 설명 | 인증 |
 |------------|--------|------|------|
-| `/api/cameras` | GET | 카메라 목록 | ○ |
+| `/api/cameras` | GET | 카메라 목록 (정렬: connected → enabled → alias) | ○ |
 | `/api/cameras/{id}` | GET | 카메라 상세 | ○ |
-| `/api/cameras/{id}` | PATCH | 카메라 수정 (alias, active) | ○ |
+| `/api/cameras/{id}` | PATCH | 카메라 수정 (alias, enabled, analysisEnabled) | ○ |
 | `/api/cameras/{id}/stream` | POST | 스트림 토큰 발급 | ○ |
-| `/api/cameras/{id}/thumbnail` | GET | 썸네일 (JSON, base64) | ○ |
-| `/api/cameras/{id}/thumbnail.jpg` | GET | 썸네일 (JPEG 바이너리) | ○ |
 
 #### Events
 
@@ -1104,7 +1109,8 @@ erDiagram
         string name
         string alias
         boolean connected
-        boolean active
+        boolean enabled
+        boolean analysis_enabled
         timestamp created_at
         timestamp updated_at
     }
@@ -1148,7 +1154,8 @@ erDiagram
 | users | idx_users_email | email |
 | users | idx_users_approved | approved |
 | cameras | idx_cameras_connected | connected |
-| cameras | idx_cameras_active | active |
+| cameras | idx_cameras_enabled | enabled |
+| cameras | idx_cameras_analysis_enabled | analysis_enabled |
 | events | idx_events_camera_id | camera_id |
 | events | idx_events_type | type |
 | events | idx_events_status | status |
@@ -1245,16 +1252,17 @@ agent.timeout-seconds=30
 1. **카메라 동기화**: aegis-infra 실행 중이어야 함
 2. **SSE 연결**: Access Token 필요 (로그인 상태)
 3. **스트림 토큰**: 30초 TTL, 일회용 (사용 후 삭제)
-4. **Agent 버퍼**: `active=false` 카메라는 AI 분석 제외
+4. **Agent 버퍼**: `enabled=false` 또는 `analysisEnabled=false` 카메라는 AI 분석 제외
 5. **프레임 수신**: DB 미등록 카메라는 404 반환
 6. **클립 추출**: HLS 녹화가 활성화되어 있어야 함
+7. **카메라 활성화 구조**: Option A (계층적) - `enabled=false`면 `analysisEnabled`도 자동 false
 
 ### 9.5 테스트 시나리오
 
 #### 카메라 추가 테스트
 1. 원격 MTX에서 SRT로 스트림 송출
 2. MediaMTX `runOnReady` → `/internal/mediamtx/sync` 호출
-3. DB에 `connected=true, active=false`로 추가 확인
+3. DB에 `connected=true, enabled=false, analysisEnabled=false`로 추가 확인
 4. SSE `camera` 이벤트 수신 확인
 
 #### AI 분석 테스트 (Agent 활성화 필요)
