@@ -144,7 +144,7 @@ flowchart TD
    - `/*` → Next.js 프론트엔드
    - `/api/*` → Spring Boot 백엔드
    - `/stream/*` → MediaMTX WebRTC WHEP (시그널링)
-   - `/internal/*` → 403 차단 (외부 접근 불가)
+   - `/internal/*` → 라우팅 없음 (외부 접근 불가)
 3. **브라우저 ↔ MediaMTX**: WebRTC ICE (UDP 8189)는 직접 연결 (DTLS 암호화)
 4. **원격 MTX → MediaMTX**: SRT (8890/udp)로 영상 스트림 수신
 5. **MediaMTX → Agent**: 프레임 직접 전송 (1fps, Python에서 버퍼링)
@@ -215,10 +215,11 @@ flowchart TD
 ```
 localhost:443
 ├── /api/*       → host.docker.internal:8080 (Spring Boot)
-├── /internal/*  → 403 차단 (외부 접근 불가)
 ├── /stream/*    → host.docker.internal:8889 (MediaMTX WHEP)
 └── /*           → host.docker.internal:3000 (Next.js)
 ```
+
+> `/internal/*`은 라우팅되지 않으므로 외부에서 접근 불가 (내부망 전용)
 
 ### 3.3 MediaMTX 설정
 
