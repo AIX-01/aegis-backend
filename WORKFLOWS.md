@@ -128,10 +128,10 @@ flowchart TD
     Caddy -->|"/api/*"| Backend
     Caddy -->|"/stream/*"| MTX
 
-    MTX -->|Frame /internal/mediamtx/frame| Backend
     MTX -->|Sync /internal/mediamtx/sync| Backend
-    Backend -->|POST /analyze| Agent
+    MTX -->|Frame /frame/{name}| Agent
     Agent -->|Webhook /internal/agent/*| Backend
+    Backend -.->|Redis Pub/Sub| Agent
 
     Backend --> PG
     Backend --> Redis
@@ -147,9 +147,10 @@ flowchart TD
    - `/internal/*` → 403 차단 (외부 접근 불가)
 3. **브라우저 ↔ MediaMTX**: WebRTC ICE (UDP 8189)는 직접 연결 (DTLS 암호화)
 4. **원격 MTX → MediaMTX**: SRT (8890/udp)로 영상 스트림 수신
-5. **MediaMTX → Backend**: 프레임 전송, 동기화 웹훅 (내부망)
-6. **Backend → Agent**: AI 분석 요청 (fire-and-forget)
-7. **Agent → Backend**: 분석 결과 웹훅 (클립 추출, 이벤트 생성)
+5. **MediaMTX → Agent**: 프레임 직접 전송 (1fps, Python에서 버퍼링)
+6. **MediaMTX → Backend**: 동기화 웹훅 (카메라 추가/삭제)
+7. **Backend → Agent (Redis Pub/Sub)**: 카메라 분석 상태 변경 알림
+8. **Agent → Backend**: 분석 결과 웹훅 (클립 추출, 이벤트 생성)
 
 ### 2.2 네트워크 구성
 
@@ -161,11 +162,13 @@ flowchart TD
 | Caddy → Frontend | HTTP | 3000 | 프론트엔드 프록시 (`/*`) |
 | Caddy → Backend | HTTP | 8080 | API 프록시 (`/api/*`) |
 | Caddy → MediaMTX | HTTP | 8889 | WebRTC WHEP 시그널링 (`/stream/*`) |
-| MediaMTX → Backend | HTTP | 8080 | 프레임/동기화 웹훅 (`/internal/mediamtx/*`) |
+| MediaMTX → Backend | HTTP | 8080 | 동기화 웹훅 (`/internal/mediamtx/sync`) |
+| MediaMTX → Agent | HTTP | 8001 | 프레임 전송 (`/frame/{name}`) |
 | Backend → MediaMTX | HTTP | 9997 | 카메라 목록 조회 API |
 | Backend → MediaMTX | HTTP | 8888 | HLS 세그먼트 다운로드 (클립 추출) |
-| Backend → Agent | HTTP | 8001 | AI 분석 요청 |
+| Backend → Redis | Pub/Sub | 6379 | 카메라 분석 상태 변경 알림 (`camera:analysis:update`) |
 | Agent → Backend | HTTP | 8080 | 분석 결과 웹훅 (`/internal/agent/*`) |
+| Agent → Backend | HTTP | 8080 | 분석 카메라 목록 조회 (`GET /internal/agent/cameras/analysis`) |
 | Backend → PostgreSQL | TCP | 5432 | 데이터베이스 연결 |
 | Backend → Redis | TCP | 6379 | 캐시/토큰 저장 |
 | Backend → MinIO | HTTP | 9000 | S3 호환 스토리지 |
@@ -264,6 +267,12 @@ localhost:443
 | `refresh_token:{token}` | userId | 7일 | 리프레시 토큰 저장 |
 | `stream_token:{token}` | userId:cameraId | 30초 | 스트림 접근 토큰 (일회용) |
 | `mediamtx:sync:lock` | "locked" | 1초 | 동기화 중복 방지 잠금 |
+
+**Pub/Sub 채널:**
+
+| 채널명 | 메시지 | 발행 시점 | 구독자 |
+|--------|--------|----------|--------|
+| `camera:analysis:update` | "update" | 카메라 `enabled` 또는 `analysisEnabled` 변경, 카메라 추가/삭제 | Python Agent |
 
 ### 3.5 MinIO 버킷 구조
 
@@ -423,19 +432,19 @@ files/
 
 #### 4.2.6 Stream 도메인
 
-**역할:** 스트림 접근 및 프레임 버퍼링
+**역할:** 스트림 접근 토큰 관리
 
 | 클래스 | 역할 |
 |--------|------|
 | `StreamService` | 스트림 토큰 발급, 인증 검증 |
-| `FrameBufferService` | Agent 버퍼 관리 (썸네일 저장 제거됨) |
 | `StreamDto` | StreamAccessResponse, MediaMTXAuthRequest |
 
-**프레임 처리 플로우:**
-1. MediaMTX에서 1fps 프레임 전송
-2. Agent 버퍼: `enabled && analysisEnabled` 카메라만 → 메모리 버퍼에 8장 수집
-3. 8장 수집 완료 → AgentService로 전송
-4. 3초 타임아웃 시 버퍼 폐기 (8장 미만은 전송 안 함)
+**프레임 처리 플로우 (Python Agent에서 처리):**
+1. MediaMTX에서 1fps 프레임을 Python Agent로 직접 전송
+2. Agent가 `GET /internal/agent/cameras/analysis`로 분석 대상 카메라 목록 조회
+3. 분석 대상 카메라의 프레임만 버퍼링 (8장 수집)
+4. 8장 수집 완료 → AI 분석 수행
+5. 카메라 상태 변경 시 Redis Pub/Sub (`camera:analysis:update`)로 Agent에 알림
 
 #### 4.2.7 User 도메인
 
@@ -463,21 +472,20 @@ files/
 
 | 클래스 | 역할 |
 |--------|------|
-| `AgentService` | Agent 백엔드에 프레임 전송 (fire-and-forget) |
-| `AgentWebhookController` | Agent 백엔드에서 호출하는 웹훅 수신 |
-| `AgentAnalysisRequest` | Agent 분석 요청 DTO (cameraId, frames) |
+| `AgentService` | Agent 백엔드 상태 확인 |
+| `AgentWebhookController` | Agent 백엔드에서 호출하는 웹훅 수신, 분석 대상 카메라 조회 |
 | `ClipRequest` | 클립 추출 요청 DTO (cameraId, segmentCount) |
 | `CreateEventRequest` | 이벤트 생성 요청 DTO (cameraId, eventType, clipKey, description, timestamp) |
 | `AnalysisResultRequest` | 분석 결과 DTO (agentAction, summary, analysisReport) |
 
 **AgentService:**
-- `sendFramesAsync()`: 8장 프레임을 Base64로 인코딩하여 Agent에 비동기 전송
 - `isAgentServerHealthy()`: Agent 서버 상태 확인
 
 **AgentWebhookController 엔드포인트:**
 
 | 엔드포인트 | 메서드 | 역할 |
 |------------|--------|------|
+| `/internal/agent/cameras/analysis` | GET | 분석 대상 카메라 목록 조회 (enabled && analysisEnabled) |
 | `/internal/agent/clips` | POST | 클립 추출 요청 → clipKey 반환 |
 | `/internal/agent/events` | POST | 이벤트 생성 → eventId 반환, 알림 생성, SSE |
 | `/internal/agent/events/{id}/analysis` | PATCH | 분석 결과 추가, 상태 RESOLVED로 변경 |
@@ -486,8 +494,8 @@ files/
 
 | 클래스 | 역할 |
 |--------|------|
-| `MediaMTXWebhookController` | MediaMTX 웹훅 수신 (동기화, 인증, 프레임) |
-| `MediaMTXSyncService` | 카메라 목록 동기화 |
+| `MediaMTXWebhookController` | MediaMTX 웹훅 수신 (동기화, 인증) |
+| `MediaMTXSyncService` | 카메라 목록 동기화, Redis Pub/Sub 발행 |
 | `ClipExtractionService` | HLS 세그먼트에서 MP4 클립 추출 |
 
 **MediaMTXWebhookController 엔드포인트:**
@@ -496,21 +504,15 @@ files/
 |------------|--------|------|
 | `/internal/mediamtx/sync` | POST | 카메라 동기화 트리거 |
 | `/internal/mediamtx/auth` | POST | 스트림 시청 인증 |
-| `/internal/mediamtx/frame/{cameraName}` | POST | 프레임 수신 |
 
 **동기화 로직:**
 1. 웹훅 수신 → Redis 1초 잠금 확인
 2. 잠금 획득 성공 → 1초 대기 (연속 이벤트 병합)
 3. MediaMTX API에서 전체 카메라 목록 조회
 4. DB 동기화:
-   - 새 카메라: `connected=true, active=false`로 추가
+   - 새 카메라: `connected=true, enabled=false, analysisEnabled=false`로 추가
    - 기존 카메라: `connected` 상태 업데이트
-5. 변경 시 캐시 무효화 + SSE `camera` 브로드캐스트
-
-**프레임 수신 로직:**
-1. 카메라 이름으로 로컬 캐시 조회 (캐시 미스 시 DB 조회)
-2. DB 미등록 카메라 → 404 반환 (거부)
-3. Agent 버퍼 추가 (`active=true` 카메라만)
+5. 변경 시 SSE `camera` 브로드캐스트 + Redis Pub/Sub 발행 (`camera:analysis:update`)
 
 **클립 추출 로직:**
 1. MediaMTX HLS API에서 m3u8 플레이리스트 파싱
@@ -522,12 +524,13 @@ files/
 
 | 클래스 | 역할 |
 |--------|------|
-| `RedisTokenService` | 토큰 저장/조회/삭제, 동기화 잠금 |
+| `RedisTokenService` | 토큰 저장/조회/삭제, 동기화 잠금, 카메라 분석 Pub/Sub 발행 |
 
 **주요 메서드:**
 - `saveRefreshToken()`, `getUserIdByRefreshToken()`, `deleteRefreshToken()`
 - `generateStreamToken()`, `validateAndConsumeStreamToken()`, `isStreamTokenValid()`
 - `tryAcquireSyncLock()`, `isSyncLocked()`
+- `publishCameraAnalysisUpdate()`: 카메라 분석 상태 변경 알림 발행
 
 #### 4.3.4 S3 서비스
 
@@ -899,10 +902,8 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant MTX as MediaMTX
-    participant WC as MediaMTXWebhookController
-    participant FB as FrameBufferService
-    participant AS as AgentService
-    participant Agent as Agent Backend
+    participant Agent as Python Agent
+    participant R as Redis
     participant AC as AgentWebhookController
     participant Clip as ClipExtractionService
     participant DB as PostgreSQL
@@ -910,32 +911,34 @@ sequenceDiagram
     participant NS as NotificationService
     participant SSE as SseEmitterService
 
-    Note over MTX,SSE: 1. 프레임 수집
+    Note over MTX,SSE: 1. 분석 대상 카메라 목록 조회
+    Agent->>R: SUBSCRIBE camera:analysis:update
+    Agent->>AC: GET /internal/agent/cameras/analysis
+    AC->>Agent: { cameras: [...] }
+
+    Note over MTX,SSE: 2. 프레임 수신 및 버퍼링 (Python Agent)
     loop 매 1초
-        MTX->>WC: POST /internal/mediamtx/frame/{cam} (JPEG)
-        WC->>WC: 카메라 캐시 조회 (미스 시 DB)
+        MTX->>Agent: POST /frame/{cameraName} (JPEG)
+        Agent->>Agent: 분석 대상 카메라인지 확인
         
-        alt DB 미등록 카메라
-            WC-->>MTX: 404 Not Found
-        else 등록된 카메라
-            WC->>FB: processFrame(cameraId, data, active)
-            FB->>FB: 썸네일 Redis 저장 (3초 TTL)
+        alt 분석 대상
+            Agent->>Agent: 버퍼에 프레임 추가
             
-            alt active=true
-                FB->>FB: Agent 버퍼 추가
-                
-                alt 8프레임 수집 완료
-                    FB->>AS: sendFramesAsync(cameraId, frames)
-                end
+            alt 8프레임 수집 완료
+                Agent->>Agent: AI 분석 수행
             end
+        else 비대상
+            Agent->>Agent: 프레임 무시
         end
     end
 
-    Note over MTX,SSE: 2. Agent 분석 요청
-    AS->>Agent: POST /analyze (8 frames, fire-and-forget)
-    Agent->>Agent: AI 분석 수행
+    Note over MTX,SSE: 3. 카메라 상태 변경 시
+    R-->>Agent: PUBLISH camera:analysis:update
+    Agent->>AC: GET /internal/agent/cameras/analysis
+    AC->>Agent: { cameras: [...] }
+    Agent->>Agent: 분석 대상 카메라 목록 갱신
 
-    Note over MTX,SSE: 3. 위험 감지 시 - 클립 추출
+    Note over MTX,SSE: 4. 위험 감지 시 - 클립 추출
     Agent->>AC: POST /internal/agent/clips { cameraId, segmentCount }
     AC->>Clip: extractClipOnly()
     Clip->>MTX: GET HLS m3u8
@@ -944,7 +947,7 @@ sequenceDiagram
     Clip->>S3: Upload clips/{uuid}/clip.mp4
     AC->>Agent: { clipKey }
 
-    Note over MTX,SSE: 4. 이벤트 생성
+    Note over MTX,SSE: 5. 이벤트 생성
     Agent->>AC: POST /internal/agent/events { cameraId, eventType, clipKey, description }
     AC->>DB: INSERT Event (status=PROCESSING)
     AC->>NS: createNotificationsForEvent()
@@ -953,28 +956,24 @@ sequenceDiagram
     AC->>SSE: broadcastEvent()
     AC->>Agent: { eventId }
 
-    Note over MTX,SSE: 5. 분석 결과 추가
+    Note over MTX,SSE: 6. 분석 결과 추가
     Agent->>AC: PATCH /internal/agent/events/{id}/analysis { agentAction, summary, analysisReport }
     AC->>DB: UPDATE Event (status=RESOLVED)
     AC->>SSE: broadcastEvent()
 ```
 
-### 6.5 프레임 버퍼 타임아웃 처리
+### 6.5 Python Agent 프레임 버퍼 처리
 
-```mermaid
-flowchart TD
-    A[1초마다 실행] --> B{lastFrameTime 확인}
-    B -->|3초 이상 경과| C{버퍼 크기?}
-    C -->|0| D[무시]
-    C -->|1-7| E[버퍼 폐기 - 불완전]
-    C -->|8| F[Agent 전송 - 정상]
-    B -->|3초 미만| G[유지]
-```
+**버퍼 로직 (Python Agent에서 구현):**
+1. MediaMTX에서 1fps 프레임 직접 수신
+2. 분석 대상 카메라 (`enabled && analysisEnabled`)의 프레임만 버퍼링
+3. 카메라당 8장 프레임 수집 후 AI 분석 수행
+4. 3초 이상 프레임이 안 들어오면 버퍼 폐기 (8장 미만은 분석 안 함)
 
-**규칙:**
-- 3초 이상 프레임이 안 들어오면 타임아웃
-- 8장 미만 버퍼는 전송하지 않고 폐기
-- 정확히 8장이면 Agent에 전송 후 폐기
+**Redis Pub/Sub 처리:**
+- 채널: `camera:analysis:update`
+- 메시지 수신 시 `GET /internal/agent/cameras/analysis` 호출
+- 분석 대상 카메라 목록 갱신
 
 ---
 
@@ -1054,12 +1053,12 @@ flowchart TD
 |------------|--------|--------|------|
 | `/internal/mediamtx/sync` | POST | MediaMTX | 카메라 동기화 트리거 |
 | `/internal/mediamtx/auth` | POST | MediaMTX | 스트림 시청 인증 |
-| `/internal/mediamtx/frame/{cameraName}` | POST | MediaMTX | 프레임 수신 (JPEG) |
 
 #### Agent 웹훅
 
 | 엔드포인트 | 메서드 | 호출자 | 설명 |
 |------------|--------|--------|------|
+| `/internal/agent/cameras/analysis` | GET | Agent | 분석 대상 카메라 목록 조회 (enabled && analysisEnabled) |
 | `/internal/agent/clips` | POST | Agent | 클립 추출 요청 |
 | `/internal/agent/events` | POST | Agent | 이벤트 생성 |
 | `/internal/agent/events/{id}/analysis` | PATCH | Agent | 분석 결과 추가 |
@@ -1266,7 +1265,7 @@ agent.timeout-seconds=30
 4. SSE `camera` 이벤트 수신 확인
 
 #### AI 분석 테스트 (Agent 활성화 필요)
-1. 카메라 `active=true` 설정
+1. 카메라 `enabled=true`, `analysisEnabled=true` 설정
 2. 8초간 프레임 수집 확인
 3. Agent 백엔드로 프레임 전송 확인
 4. Agent 웹훅으로 이벤트 생성 확인
@@ -1278,6 +1277,7 @@ agent.timeout-seconds=30
 | 항목 | 설명 | 우선순위 |
 |------|------|----------|
 | Agent 백엔드 구현 | Python 기반 영상 분석 | 높음 |
+| 모바일 최적화 | 반응형 그리드, 터치 제스처, 햄버거 메뉴 | 중간 |
 | PWA 지원 | 모바일 앱 설치 | 중간 |
 | 다중 인스턴스 | Redis Pub/Sub SSE | 중간 |
 | 알림 필터링 | 이벤트 타입별 알림 설정 | 낮음 |
