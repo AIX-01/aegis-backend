@@ -791,27 +791,27 @@ sequenceDiagram
     B->>F: 로그인 폼 제출
     F->>S: POST /api/auth/login
     S->>S: 비밀번호 검증
-    S->>R: SET refresh_token:{token} (7일)
-    S->>F: { accessToken, user }
+    S->>R: SET refresh_token 7일
+    S->>F: accessToken, user
     F->>F: accessToken 메모리 저장
     F->>B: 대시보드 리다이렉트
 
     Note over B,R: 2. API 호출
     B->>F: 카메라 목록 요청
-    F->>S: GET /api/cameras (Authorization: Bearer {token})
+    F->>S: GET /api/cameras with Bearer token
     S->>S: JWT 검증
     S->>F: 카메라 목록
 
-    Note over B,R: 3. 토큰 갱신 (401 발생 시)
-    F->>S: POST /api/auth/refresh (Cookie: refreshToken)
-    S->>R: GET refresh_token:{token}
-    S->>F: { accessToken }
-    F->>F: accessToken 갱신 후 원래 요청 재시도
+    Note over B,R: 3. 토큰 갱신
+    F->>S: POST /api/auth/refresh with Cookie
+    S->>R: GET refresh_token
+    S->>F: accessToken
+    F->>F: accessToken 갱신 후 재시도
 
     Note over B,R: 4. 로그아웃
     B->>F: 로그아웃 클릭
     F->>S: POST /api/auth/logout
-    S->>R: DEL refresh_token:{token}
+    S->>R: DEL refresh_token
     F->>F: accessToken 삭제
     F->>B: 로그인 페이지 리다이렉트
 ```
@@ -830,14 +830,14 @@ sequenceDiagram
 
     Note over MTX,F: 스트림 시작/종료 시
     MTX->>WC: POST /internal/mediamtx/sync
-    WC->>Sync: onWebhookReceived()
+    WC->>Sync: onWebhookReceived
     
     Sync->>R: isSyncLocked?
     alt 잠금 상태
-        Sync-->>WC: return (무시)
+        Sync-->>WC: return
     else 잠금 없음
-        Sync->>R: tryAcquireSyncLock (1초)
-        Sync->>Sync: sleep(1초) - 연속 이벤트 병합
+        Sync->>R: tryAcquireSyncLock
+        Sync->>Sync: sleep 1초
         
         Sync->>MTX: GET /v3/paths/list
         MTX-->>Sync: 카메라 목록
@@ -845,15 +845,15 @@ sequenceDiagram
         Sync->>DB: 현재 카메라 목록 조회
         
         loop 새 카메라
-            Sync->>DB: INSERT (connected=true, active=false)
+            Sync->>DB: INSERT camera
         end
         
         loop 기존 카메라
-            Sync->>DB: UPDATE connected 상태
+            Sync->>DB: UPDATE connected
         end
         
-        Sync->>WC: invalidateCameraCache()
-        Sync->>SSE: broadcastCamera("refresh")
+        Sync->>SSE: broadcastCamera refresh
+        Sync->>R: publishCameraAnalysisUpdate
         SSE->>F: SSE camera 이벤트
         F->>F: 카메라 목록 갱신
     end
@@ -871,18 +871,18 @@ sequenceDiagram
     participant MTX as MediaMTX
 
     Note over B,MTX: 1. 스트림 접근 요청
-    B->>WP: 카메라 선택 (그리드에서 WebRTC 자동 연결)
-    WP->>C: POST /api/cameras/{id}/stream
+    B->>WP: 카메라 선택
+    WP->>C: POST /api/cameras/id/stream
     C->>S: 프록시
     S->>S: 카메라 접근 권한 확인
-    S->>R: SET stream_token:{token} (30초)
-    S->>WP: { streamUrl: /stream/cam/whep, token }
+    S->>R: SET stream_token 30초
+    S->>WP: streamUrl, token
 
-    Note over B,MTX: 2. WHEP 시그널링 (HTTPS)
-    WP->>C: POST /stream/cam/whep?token={token}
-    C->>MTX: 프록시 (strip /stream)
-    MTX->>S: POST /internal/mediamtx/auth (query에 token)
-    S->>R: GET & DEL stream_token:{token}
+    Note over B,MTX: 2. WHEP 시그널링
+    WP->>C: POST /stream/cam/whep with token
+    C->>MTX: 프록시
+    MTX->>S: POST /internal/mediamtx/auth
+    S->>R: GET and DEL stream_token
     
     alt 토큰 유효
         S->>MTX: 200 OK
@@ -892,8 +892,8 @@ sequenceDiagram
         MTX->>WP: 연결 거부
     end
 
-    Note over B,MTX: 3. ICE 미디어 (UDP 직접)
-    WP->>MTX: UDP :8189 (DTLS/SRTP)
+    Note over B,MTX: 3. ICE 미디어
+    WP->>MTX: UDP 8189 DTLS/SRTP
     MTX->>WP: 암호화된 미디어 스트림
 ```
 
@@ -914,12 +914,12 @@ sequenceDiagram
     Note over MTX,SSE: 1. 분석 대상 카메라 목록 조회
     Agent->>R: SUBSCRIBE camera:analysis:update
     Agent->>AC: GET /internal/agent/cameras/analysis
-    AC->>Agent: { cameras: [...] }
+    AC->>Agent: cameras list
 
-    Note over MTX,SSE: 2. 프레임 수신 및 버퍼링 (Python Agent)
+    Note over MTX,SSE: 2. 프레임 수신 및 버퍼링
     loop 매 1초
-        MTX->>Agent: POST /frame/{cameraName} (JPEG)
-        Agent->>Agent: 분석 대상 카메라인지 확인
+        MTX->>Agent: POST /frame/cameraName
+        Agent->>Agent: 분석 대상 확인
         
         alt 분석 대상
             Agent->>Agent: 버퍼에 프레임 추가
@@ -935,31 +935,31 @@ sequenceDiagram
     Note over MTX,SSE: 3. 카메라 상태 변경 시
     R-->>Agent: PUBLISH camera:analysis:update
     Agent->>AC: GET /internal/agent/cameras/analysis
-    AC->>Agent: { cameras: [...] }
-    Agent->>Agent: 분석 대상 카메라 목록 갱신
+    AC->>Agent: cameras list
+    Agent->>Agent: 분석 대상 목록 갱신
 
-    Note over MTX,SSE: 4. 위험 감지 시 - 클립 추출
-    Agent->>AC: POST /internal/agent/clips { cameraId, segmentCount }
-    AC->>Clip: extractClipOnly()
+    Note over MTX,SSE: 4. 위험 감지 시 클립 추출
+    Agent->>AC: POST /internal/agent/clips
+    AC->>Clip: extractClipOnly
     Clip->>MTX: GET HLS m3u8
-    Clip->>MTX: GET .ts segments (HTTP)
-    Clip->>Clip: FFmpeg concat → MP4
-    Clip->>S3: Upload clips/{uuid}/clip.mp4
-    AC->>Agent: { clipKey }
+    Clip->>MTX: GET ts segments
+    Clip->>Clip: FFmpeg concat MP4
+    Clip->>S3: Upload clip
+    AC->>Agent: clipKey
 
     Note over MTX,SSE: 5. 이벤트 생성
-    Agent->>AC: POST /internal/agent/events { cameraId, eventType, clipKey, description }
-    AC->>DB: INSERT Event (status=PROCESSING)
-    AC->>NS: createNotificationsForEvent()
-    NS->>DB: INSERT Notifications (카메라 접근 권한 있는 사용자)
-    NS->>SSE: sendNotification (개별)
-    AC->>SSE: broadcastEvent()
-    AC->>Agent: { eventId }
+    Agent->>AC: POST /internal/agent/events
+    AC->>DB: INSERT Event
+    AC->>NS: createNotificationsForEvent
+    NS->>DB: INSERT Notifications
+    NS->>SSE: sendNotification
+    AC->>SSE: broadcastEvent
+    AC->>Agent: eventId
 
     Note over MTX,SSE: 6. 분석 결과 추가
-    Agent->>AC: PATCH /internal/agent/events/{id}/analysis { agentAction, summary, analysisReport }
-    AC->>DB: UPDATE Event (status=RESOLVED)
-    AC->>SSE: broadcastEvent()
+    Agent->>AC: PATCH /internal/agent/events/id/analysis
+    AC->>DB: UPDATE Event RESOLVED
+    AC->>SSE: broadcastEvent
 ```
 
 ### 6.5 Python Agent 프레임 버퍼 처리
