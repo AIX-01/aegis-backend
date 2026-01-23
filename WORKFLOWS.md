@@ -57,7 +57,7 @@ aegis/
 │       │   ├── event/       # 이벤트 (위험 감지 기록)
 │       │   ├── notification/# 알림 및 SSE
 │       │   ├── stats/       # 통계
-│       │   ├── stream/      # 스트림 접근, 프레임 버퍼
+│       │   ├── stream/      # 스트림 접근 토큰
 │       │   └── user/        # 사용자 관리
 │       ├── global/          # 전역 설정
 │       │   ├── common/      # 공통 Enum, DTO
@@ -766,7 +766,6 @@ interface PasswordChangeRequest { currentPassword, newPassword }
 
 // 스트림
 interface StreamAccessResponse { streamUrl, token, cameraId, cameraName }
-interface ThumbnailResponse { image: string }  // Base64
 
 // 통계
 interface DailyStat { day, events, resolved }
