@@ -129,8 +129,8 @@ flowchart TD
     Caddy -->|"/stream/*"| MTX
 
     MTX -->|Sync /internal/mediamtx/sync| Backend
-    MTX -->|Frame /frame/{name}| Agent
-    Agent -->|Webhook /internal/agent/*| Backend
+    MTX -->|"Frame /frame/name"| Agent
+    Agent -->|"Webhook /internal/agent/*"| Backend
     Backend -.->|Redis Pub/Sub| Agent
 
     Backend --> PG
