@@ -14,14 +14,16 @@ public class CameraDto {
     private String name;
     private Boolean connected;
     private String alias;
-    private Boolean active;
+    private Boolean enabled;
+    private Boolean analysisEnabled;
 
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class UpdateRequest {
         private String alias;
-        private Boolean active;
+        private Boolean enabled;
+        private Boolean analysisEnabled;
     }
 }
 
