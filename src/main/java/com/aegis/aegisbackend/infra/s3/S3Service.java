@@ -31,11 +31,14 @@ public class S3Service {
      * 이벤트 클립 업로드
      * @param eventId 이벤트 ID
      * @param clipData 클립 바이트 데이터
-     * @param contentType MIME 타입 (video/mp4)
-     * @return 저장된 클립 URL (events/{eventId}/clip.mp4)
+     * @param contentType MIME 타입 (video/mp2t)
+     * @return 저장된 클립 URL (events/{eventId}/clip.ts)
      */
     public String uploadEventClip(UUID eventId, byte[] clipData, String contentType) {
         String key = buildEventClipKey(eventId);
+
+        log.info("S3 업로드 시작: bucket={}, key={}, size={}KB, contentType={}",
+                bucketName, key, clipData.length / 1024, contentType);
 
         try {
             PutObjectRequest request = PutObjectRequest.builder()
@@ -45,11 +48,15 @@ public class S3Service {
                     .build();
 
             s3Client.putObject(request, RequestBody.fromBytes(clipData));
-            log.info("클립 업로드 완료: eventId={}, key={}", eventId, key);
+            log.info("S3 업로드 완료: eventId={}, key={}, size={}KB", eventId, key, clipData.length / 1024);
 
             return key;
         } catch (S3Exception e) {
-            log.error("클립 업로드 실패: eventId={}, error={}", eventId, e.getMessage());
+            log.error("S3 업로드 실패: eventId={}, bucket={}, key={}, error={}",
+                    eventId, bucketName, key, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
+        } catch (Exception e) {
+            log.error("S3 업로드 중 예외 발생: eventId={}, error={}", eventId, e.getMessage(), e);
             throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
@@ -118,7 +125,6 @@ public class S3Service {
             return false;
         }
     }
-
 
     private String buildEventClipKey(UUID eventId) {
         return "events/" + eventId + "/clip.mp4";
