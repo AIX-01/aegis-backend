@@ -97,6 +97,15 @@ public class NotificationService {
         notificationRepository.deleteById(notificationId);
     }
 
+    /**
+     * 이벤트에 연결된 모든 알림 삭제
+     */
+    @Transactional
+    public void deleteNotificationsByEventId(UUID eventId) {
+        notificationRepository.deleteByEventId(eventId);
+        log.info("이벤트 관련 알림 삭제 완료: eventId={}", eventId);
+    }
+
     /** 이벤트 발생 시 관련 사용자들에게 알림 생성 */
     @Transactional
     public void createNotificationsForEvent(Event event) {

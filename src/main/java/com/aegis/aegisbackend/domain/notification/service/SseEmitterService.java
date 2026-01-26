@@ -157,6 +157,23 @@ public class SseEmitterService {
     }
 
     /**
+     * 이벤트 삭제 브로드캐스트
+     */
+    public void broadcastEventDeleted(String eventId) {
+        log.debug("이벤트 삭제 브로드캐스트: eventId={}, 연결된 사용자 수={}", eventId, emitters.size());
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("event-deleted")
+                        .data(Map.of("id", eventId)));
+            } catch (IOException e) {
+                log.warn("이벤트 삭제 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
      * 멤버 이벤트 브로드캐스트 (승인/삭제/역할변경)
      */
     public void broadcastMember(Object memberData) {

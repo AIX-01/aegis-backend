@@ -132,6 +132,40 @@ public class EventService {
         return eventDto;
     }
 
+    /**
+     * 이벤트 삭제 (Admin 전용)
+     * - S3에서 클립 삭제
+     * - DB에서 연관 알림 삭제
+     * - DB에서 이벤트 삭제
+     */
+    @Transactional
+    public void deleteEvent(UUID eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        // 1. S3에서 클립 삭제
+        if (event.getClipUrl() != null && !event.getClipUrl().isEmpty()) {
+            try {
+                s3Service.deleteClip(event.getClipUrl());
+                log.info("이벤트 클립 삭제 완료: eventId={}, clipUrl={}", eventId, event.getClipUrl());
+            } catch (Exception e) {
+                log.warn("이벤트 클립 삭제 실패 (이벤트는 삭제 진행): eventId={}, error={}", eventId, e.getMessage());
+            }
+        }
+
+        // 2. 연관 알림 삭제 (Event 엔티티의 notifications 관계로 cascade 처리)
+        // Event 엔티티에 @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true) 설정 필요
+        // 또는 직접 삭제
+        notificationService.deleteNotificationsByEventId(eventId);
+
+        // 3. 이벤트 삭제
+        eventRepository.delete(event);
+        log.info("이벤트 삭제 완료: eventId={}", eventId);
+
+        // SSE로 이벤트 삭제 브로드캐스트
+        sseEmitterService.broadcastEventDeleted(eventId.toString());
+    }
+
     private EventDto toEventDto(Event event) {
         return EventDto.builder()
                 .id(event.getId().toString())

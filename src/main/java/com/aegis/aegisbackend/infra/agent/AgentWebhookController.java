@@ -12,7 +12,6 @@ import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.agent.dto.AnalysisResultRequest;
-import com.aegis.aegisbackend.infra.agent.dto.ClipRequest;
 import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
 import com.aegis.aegisbackend.infra.mediamtx.ClipExtractionService;
 import lombok.RequiredArgsConstructor;
@@ -29,8 +28,7 @@ import java.util.UUID;
 /**
  * Agent 컨트롤러 (내부망 전용)
  * - 분석 대상 카메라 조회: GET /internal/agent/cameras/analysis
- * - 클립 추출: POST /internal/agent/clips
- * - 이벤트 생성: POST /internal/agent/events
+ * - 이벤트 생성: POST /internal/agent/events (클립 자동 추출 포함)
  * - 분석 결과 추가: PATCH /internal/agent/events/{id}/analysis
  */
 @Slf4j
@@ -68,55 +66,19 @@ public class AgentWebhookController {
     }
 
     /**
-     * 클립 추출 (이벤트 없이)
-     * - HLS 세그먼트 → MP4 → MinIO 저장
-     * - clipKey 반환 (이벤트 생성 시 사용)
-     */
-    @PostMapping("/clips")
-    public ResponseEntity<?> extractClip(@RequestBody ClipRequest request) {
-        log.info("클립 추출 요청: cameraId={}", request.getCameraId());
-
-        try {
-            // 카메라 존재 확인
-            if (!cameraRepository.existsById(request.getCameraId())) {
-                throw new BusinessException(ErrorCode.CAMERA_NOT_FOUND);
-            }
-
-            int segmentCount = request.getSegmentCount() != null ? request.getSegmentCount() : 10;
-
-            // 클립 추출 (동기)
-            String clipKey = clipExtractionService.extractClipOnly(request.getCameraId(), segmentCount);
-
-            log.info("클립 추출 완료: cameraId={}, clipKey={}", request.getCameraId(), clipKey);
-
-            return ResponseEntity.ok(Map.of(
-                    "clipKey", clipKey,
-                    "cameraId", request.getCameraId().toString()
-            ));
-
-        } catch (BusinessException e) {
-            log.error("클립 추출 실패: {}", e.getMessage());
-            return ResponseEntity.status(e.getErrorCode().getStatus())
-                    .body(Map.of("error", e.getMessage()));
-        } catch (Exception e) {
-            log.error("클립 추출 실패: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    /**
-     * 이벤트 생성 (클립 포함)
-     * - 이벤트 DB 저장
+     * 이벤트 생성 (클립 자동 추출 포함)
+     * - 이벤트 = 메타데이터 + 클립 영상이 함께 포함된 단일 객체
+     * - cameraName으로 카메라 조회 → 이벤트 생성 → 클립 추출 → DB 저장
      * - 알림 생성 + SSE 브로드캐스트
+     * - 응답으로 전체 EventDto 반환
      */
     @PostMapping("/events")
     public ResponseEntity<?> createEvent(@RequestBody CreateEventRequest request) {
-        log.info("이벤트 생성 요청: cameraId={}, eventType={}", request.getCameraId(), request.getEventType());
+        log.info("이벤트 생성 요청: cameraName={}, eventType={}", request.getCameraName(), request.getEventType());
 
         try {
-            // 카메라 확인
-            Camera camera = cameraRepository.findById(request.getCameraId())
+            // cameraName(실명)으로 카메라 조회
+            Camera camera = cameraRepository.findByName(request.getCameraName())
                     .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
             // timestamp 파싱 (없으면 현재 시간)
@@ -124,18 +86,30 @@ public class AgentWebhookController {
                     ? LocalDateTime.parse(request.getTimestamp())
                     : LocalDateTime.now();
 
-            // 이벤트 생성
+            // 이벤트 생성 (클립 URL은 추출 후 설정)
             Event event = Event.builder()
                     .camera(camera)
                     .type(EventType.fromValue(request.getEventType()))
                     .timestamp(timestamp)
                     .status(EventStatus.PROCESSING)
-                    .description(request.getDescription())
-                    .clipUrl(request.getClipKey())
+                    .description(generateDescription(request.getEventType(), camera.getAlias()))
                     .build();
 
             Event savedEvent = eventRepository.save(event);
             log.info("이벤트 생성 완료: eventId={}", savedEvent.getId());
+
+            // 클립 추출 및 저장 (동기)
+            try {
+                String clipUrl = clipExtractionService.extractAndSaveClip(
+                        camera.getName(),
+                        savedEvent.getId()
+                );
+                savedEvent.setClipUrl(clipUrl);
+                eventRepository.save(savedEvent);
+                log.info("클립 추출 완료: eventId={}, clipUrl={}", savedEvent.getId(), clipUrl);
+            } catch (Exception e) {
+                log.warn("클립 추출 실패, 이벤트는 유지됨: eventId={}, error={}", savedEvent.getId(), e.getMessage());
+            }
 
             // 알림 생성
             notificationService.createNotificationsForEvent(savedEvent);
@@ -144,10 +118,7 @@ public class AgentWebhookController {
             EventDto eventDto = toEventDto(savedEvent);
             sseEmitterService.broadcastEvent(eventDto);
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-                    "eventId", savedEvent.getId().toString(),
-                    "status", savedEvent.getStatus().getValue()
-            ));
+            return ResponseEntity.status(HttpStatus.CREATED).body(eventDto);
 
         } catch (BusinessException e) {
             log.error("이벤트 생성 실패: {}", e.getMessage());
@@ -164,6 +135,7 @@ public class AgentWebhookController {
      * Agent 분석 결과 추가
      * - 이벤트에 분석 결과 업데이트
      * - 상태를 RESOLVED로 변경
+     * - 응답으로 전체 EventDto 반환
      */
     @PatchMapping("/events/{eventId}/analysis")
     public ResponseEntity<?> addAnalysisResult(
@@ -188,10 +160,7 @@ public class AgentWebhookController {
             EventDto eventDto = toEventDto(event);
             sseEmitterService.broadcastEvent(eventDto);
 
-            return ResponseEntity.ok(Map.of(
-                    "eventId", eventId.toString(),
-                    "status", event.getStatus().getValue()
-            ));
+            return ResponseEntity.ok(eventDto);
 
         } catch (BusinessException e) {
             log.error("분석 결과 추가 실패: {}", e.getMessage());
@@ -202,6 +171,21 @@ public class AgentWebhookController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * 이벤트 타입에 따른 기본 설명 생성
+     */
+    private String generateDescription(String eventType, String cameraAlias) {
+        String typeKorean = switch (eventType.toLowerCase()) {
+            case "assault" -> "폭행";
+            case "burglary" -> "절도";
+            case "dump" -> "투기";
+            case "swoon" -> "실신";
+            case "vandalism" -> "파손";
+            default -> "이상상황";
+        };
+        return cameraAlias + "에서 " + typeKorean + " 감지";
     }
 
     private EventDto toEventDto(Event event) {

@@ -1,19 +1,12 @@
 package com.aegis.aegisbackend.infra.mediamtx;
 
-import com.aegis.aegisbackend.domain.camera.entity.Camera;
-import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
-import com.aegis.aegisbackend.domain.event.entity.Event;
-import com.aegis.aegisbackend.domain.event.repository.EventRepository;
-import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.BufferedReader;
@@ -30,6 +23,7 @@ import java.util.regex.Pattern;
 
 /**
  * 클립 추출 서비스
+ * - 이벤트 생성 시 자동으로 클립 추출
  * - MediaMTX HLS API를 통해 HTTP로 세그먼트 다운로드
  * - FFmpeg로 MP4 변환 후 MinIO에 저장
  */
@@ -38,8 +32,6 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ClipExtractionService {
 
-    private final CameraRepository cameraRepository;
-    private final EventRepository eventRepository;
     private final S3Service s3Service;
     private final WebClient.Builder webClientBuilder;
 
@@ -56,110 +48,24 @@ public class ClipExtractionService {
     private static final Pattern SEGMENT_PATTERN = Pattern.compile("^([^#].+\\.ts)$", Pattern.MULTILINE);
 
     /**
-     * 이벤트 클립 추출 (비동기)
-     * - HLS 세그먼트 파일들을 HTTP로 다운로드하여 클립 생성
-     * - MinIO에 저장 후 이벤트 clipUrl 업데이트
-     *
-     * 참고: @Transactional 제거 - 외부 I/O(HTTP, MinIO) 작업 위주이고,
-     * @Async와 함께 사용 시 트랜잭션 컨텍스트가 전파되지 않음
-     */
-    @Async
-    public void extractAndSaveClipAsync(UUID cameraId, UUID eventId, int segmentCount) {
-        try {
-            String clipKey = extractAndSaveClip(cameraId, eventId, segmentCount);
-
-            // 이벤트에 clipUrl 업데이트
-            Event event = eventRepository.findById(eventId).orElse(null);
-            if (event != null) {
-                event.setClipUrl(clipKey);
-                event.setStatus(EventStatus.RESOLVED);
-                eventRepository.save(event);
-                log.info("이벤트 클립 URL 업데이트: eventId={}, clipKey={}", eventId, clipKey);
-            }
-        } catch (Exception e) {
-            log.error("클립 추출 실패: eventId={}", eventId, e);
-
-            // 실패 시에도 이벤트 상태 업데이트
-            Event event = eventRepository.findById(eventId).orElse(null);
-            if (event != null) {
-                event.setStatus(EventStatus.RESOLVED);
-                eventRepository.save(event);
-            }
-        }
-    }
-
-    /**
-     * 기본 세그먼트 수로 클립 추출
-     */
-    @Async
-    @Transactional
-    public void extractAndSaveClipAsync(UUID cameraId, UUID eventId) {
-        extractAndSaveClipAsync(cameraId, eventId, defaultSegmentCount);
-    }
-
-    /**
-     * 독립 클립 추출 (이벤트 없이, 동기)
-     * - AI 백엔드에서 클립만 먼저 추출할 때 사용
-     * - 클립 ID(UUID)를 생성하여 MinIO에 저장
-     * - 나중에 이벤트 생성 시 clipKey로 연결
-     */
-    public String extractClipOnly(UUID cameraId, int segmentCount) {
-        Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND_FOR_CLIP));
-
-        String cameraName = camera.getName();
-        UUID clipId = UUID.randomUUID();  // 독립 클립 ID
-        Path tempDirPath = Path.of(tempDir, clipId.toString());
-
-        try {
-            Files.createDirectories(tempDirPath);
-
-            List<Path> segmentFiles = downloadHlsSegments(cameraName, tempDirPath, segmentCount);
-            if (segmentFiles.isEmpty()) {
-                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "HLS 세그먼트를 다운로드할 수 없습니다: " + cameraName);
-            }
-
-            log.info("독립 클립 추출 시작: camera={}, clipId={}, segments={}", cameraName, clipId, segmentFiles.size());
-
-            Path concatListPath = tempDirPath.resolve("concat.txt");
-            createConcatList(concatListPath, segmentFiles);
-
-            Path outputPath = tempDirPath.resolve("clip.mp4");
-
-            boolean success = mergeSegmentsWithFFmpeg(concatListPath, outputPath);
-            if (!success) {
-                throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED, "FFmpeg 클립 합치기 실패");
-            }
-
-            byte[] clipData = Files.readAllBytes(outputPath);
-            String clipKey = "clips/" + clipId + "/clip.mp4";
-            s3Service.uploadClip(clipKey, clipData, "video/mp4");
-
-            log.info("독립 클립 저장 완료: camera={}, clipKey={}, size={}KB", cameraName, clipKey, clipData.length / 1024);
-
-            return clipKey;
-
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("독립 클립 추출 실패: camera={}", cameraName, e);
-            throw new BusinessException(ErrorCode.CLIP_EXTRACTION_FAILED);
-        } finally {
-            cleanupTempFiles(tempDirPath);
-        }
-    }
-
-    /**
      * 이벤트 클립 추출 (동기)
+     * - cameraName(실명)과 eventId로 클립 추출
      * - MediaMTX HLS API에서 m3u8 파싱 후 세그먼트 다운로드
      * - FFmpeg로 하나의 MP4로 합침
      * - MinIO에 업로드
+     *
+     * @param cameraName MediaMTX 스트림 경로명 (실명, 예: cam1)
+     * @param eventId 이벤트 ID
+     * @return clipUrl (MinIO 저장 경로)
      */
-    public String extractAndSaveClip(UUID cameraId, UUID eventId, int segmentCount) {
-        Camera camera = cameraRepository.findById(cameraId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND_FOR_CLIP));
+    public String extractAndSaveClip(String cameraName, UUID eventId) {
+        return extractAndSaveClip(cameraName, eventId, defaultSegmentCount);
+    }
 
-        String cameraName = camera.getName();
+    /**
+     * 이벤트 클립 추출 (동기, 세그먼트 수 지정)
+     */
+    public String extractAndSaveClip(String cameraName, UUID eventId, int segmentCount) {
         Path tempDirPath = Path.of(tempDir, eventId.toString());
 
         try {

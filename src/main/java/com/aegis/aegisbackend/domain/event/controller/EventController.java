@@ -12,17 +12,20 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * 이벤트 API
  * - 위험/이상 상황 이벤트 조회 및 관리
  * - 클립 다운로드 및 스트리밍 재생
+ * - 이벤트 = 메타데이터 + 클립이 함께 있는 단일 객체
  */
 @RestController
 @RequestMapping("/api/events")
@@ -58,6 +61,19 @@ public class EventController {
             @RequestBody EventDto.UpdateStatusRequest request) {
         EventDto event = eventService.updateEventStatus(id, request.getStatus());
         return ResponseEntity.ok(event);
+    }
+
+    /**
+     * 이벤트 삭제 (Admin 전용)
+     * - S3에서 클립 삭제
+     * - DB에서 연관 알림 삭제
+     * - DB에서 이벤트 삭제
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> deleteEvent(@PathVariable UUID id) {
+        eventService.deleteEvent(id);
+        return ResponseEntity.ok(Map.of("success", true, "message", "이벤트가 삭제되었습니다."));
     }
 
     /**
