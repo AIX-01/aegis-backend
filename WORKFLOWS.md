@@ -2,7 +2,7 @@
 
 > CCTV 실시간 AI 안전 모니터링 시스템
 
-**최종 업데이트**: 2026-01-23
+**최종 업데이트**: 2026-01-26
 
 ---
 
@@ -118,9 +118,8 @@ flowchart LR
 3. Agent → Spring Boot: `GET /internal/agent/cameras/analysis`
 4. Agent: 분석 대상 카메라 프레임 버퍼링 (8장)
 5. Agent: AI 분석 수행
-6. Agent → Spring Boot: `POST /internal/agent/clips` → clipKey
-7. Agent → Spring Boot: `POST /internal/agent/events` → eventId
-8. Agent → Spring Boot: `PATCH /internal/agent/events/{id}/analysis`
+6. Agent → Spring Boot: `POST /internal/agent/events` → Event (클립 자동 추출 포함)
+7. Agent → Spring Boot: `PATCH /internal/agent/events/{id}/analysis`
 
 ---
 
@@ -196,7 +195,6 @@ aegis-backend/src/main/java/com/aegis/aegisbackend/
     │   ├── AgentWebhookController.java
     │   └── dto/
     │       ├── AnalysisResultRequest.java
-    │       ├── ClipRequest.java
     │       └── CreateEventRequest.java
     ├── mediamtx/
     │   ├── ClipExtractionService.java
@@ -813,6 +811,24 @@ files/
 
 ---
 
+#### DELETE /api/events/{id}
+이벤트 삭제 (Admin 전용)
+
+- 이벤트 = 메타데이터 + 클립이 함께 삭제됨
+- S3에서 클립 삭제 + DB에서 연관 알림 삭제 + 이벤트 삭제
+
+**Response:** `200 OK`
+
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| success | boolean | true |
+| message | string | "이벤트가 삭제되었습니다." |
+
+**Side Effect:** SSE `event-deleted` 이벤트 브로드캐스트
+
+---
+
 #### GET /api/events/{id}/clip
 클립 다운로드 (인증 필요)
 
@@ -1090,8 +1106,11 @@ SSE 스트림 연결 (인증 필요)
 
 ---
 
-#### POST /internal/agent/clips
-클립 추출 (Agent → Spring)
+#### POST /internal/agent/events
+이벤트 생성 (Agent → Spring)
+
+- 이벤트 = 메타데이터 + 클립 영상이 함께 포함된 단일 객체
+- 클립 추출이 자동으로 수행됨
 
 
 **Request:**
@@ -1100,59 +1119,22 @@ SSE 스트림 연결 (인증 필요)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| cameraId | UUID | O | 카메라 ID |
-| segmentCount | number | X | 세그먼트 수 (기본: 10) |
+| cameraName | string | O | MediaMTX 스트림 경로명 (실명, 예: cam1) |
+| eventType | string | O | assault/burglary/dump/swoon/vandalism |
+| timestamp | string | X | ISO8601 (기본: 현재) |
 
-**Response:** `200 OK`
-
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| clipKey | string | MinIO 저장 키 (clips/{uuid}/clip.mp4) |
-| cameraId | string | 카메라 ID |
+**Response:** `201 Created` → Event (전체 이벤트 객체)
 
 
 **로직:**
 
-1. MediaMTX HLS `GET /{camera}/index.m3u8` 파싱
-2. 최신 N개 .ts 세그먼트 HTTP 다운로드
-3. FFmpeg `-f concat`으로 MP4 변환
-4. MinIO `clips/{uuid}/clip.mp4`에 업로드
-5. 임시 파일 정리
-
----
-
-#### POST /internal/agent/events
-이벤트 생성 (Agent → Spring)
-
-
-**Request:**
-
-
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| cameraId | UUID | O | 카메라 ID |
-| eventType | string | O | assault/burglary/dump/swoon/vandalism |
-| description | string | X | 설명 |
-| clipKey | string | X | 클립 키 |
-| timestamp | string | X | ISO8601 (기본: 현재) |
-
-**Response:** `201 Created`
-
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| eventId | string | 이벤트 ID |
-| status | string | "processing" |
-
-
-**Side Effect:**
-
-1. DB에 Event 저장 (status=PROCESSING)
-2. 카메라 권한 있는 사용자에게 Notification 생성
-3. SSE `notification` 개별 전송
-4. SSE `event` 전체 브로드캐스트
+1. cameraName으로 카메라 조회
+2. DB에 Event 저장 (status=PROCESSING)
+3. HLS 세그먼트 다운로드 → FFmpeg 변환 → MinIO 업로드
+4. Event.clipUrl 업데이트
+5. 카메라 권한 있는 사용자에게 Notification 생성
+6. SSE `notification` 개별 전송
+7. SSE `event` 전체 브로드캐스트
 
 ---
 
