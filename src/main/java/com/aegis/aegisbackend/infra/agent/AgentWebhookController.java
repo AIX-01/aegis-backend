@@ -44,6 +44,33 @@ public class AgentWebhookController {
     private final SseEmitterService sseEmitterService;
 
     /**
+     * 클립 추출 테스트 엔드포인트
+     * - 실제 이벤트 생성 없이 클립 추출만 테스트
+     */
+    @GetMapping("/test/clip/{cameraName}")
+    public ResponseEntity<?> testClipExtraction(@PathVariable String cameraName) {
+        log.info("클립 추출 테스트: cameraName={}", cameraName);
+
+        try {
+            UUID testId = UUID.randomUUID();
+            String clipUrl = clipExtractionService.extractAndSaveClip(cameraName, testId);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "clipUrl", clipUrl,
+                    "testEventId", testId.toString()
+            ));
+        } catch (Exception e) {
+            log.error("클립 추출 테스트 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "error", e.getMessage(),
+                            "errorClass", e.getClass().getSimpleName()
+                    ));
+        }
+    }
+
+    /**
      * 분석 대상 카메라 목록 조회
      * - Python Agent가 Redis Pub/Sub 수신 후 호출
      * - enabled=true && analysisEnabled=true인 카메라만 반환

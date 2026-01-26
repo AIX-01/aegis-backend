@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -143,12 +144,16 @@ public class NotificationService {
     }
 
     private NotificationDto toNotificationDto(Notification notification) {
+        LocalDateTime timestamp = notification.getCreatedAt() != null
+                ? notification.getCreatedAt()
+                : LocalDateTime.now();
+
         return NotificationDto.builder()
                 .id(notification.getId().toString())
                 .type(notification.getType().getValue())
                 .title(notification.getTitle())
                 .message(notification.getMessage())
-                .timestamp(notification.getCreatedAt().toString())
+                .timestamp(timestamp.toString())
                 .read(notification.getRead())
                 .eventId(notification.getEvent() != null ? notification.getEvent().getId().toString() : null)
                 .build();
