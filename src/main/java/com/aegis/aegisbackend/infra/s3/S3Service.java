@@ -10,9 +10,13 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
-import java.io.InputStream;
 import java.util.UUID;
 
+/**
+ * S3/MinIO 스토리지 서비스
+ * - 이벤트 클립 업로드/다운로드/삭제
+ * - 이벤트 = 메타데이터 + 클립이 함께 있는 단일 객체
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,16 +29,14 @@ public class S3Service {
 
     /**
      * 이벤트 클립 업로드
+     * @param eventId 이벤트 ID
+     * @param clipData 클립 바이트 데이터
+     * @param contentType MIME 타입 (video/mp4)
+     * @return 저장된 클립 URL (events/{eventId}/clip.mp4)
      */
     public String uploadEventClip(UUID eventId, byte[] clipData, String contentType) {
         String key = buildEventClipKey(eventId);
-        return uploadClip(key, clipData, contentType);
-    }
 
-    /**
-     * 클립 업로드 (키 직접 지정)
-     */
-    public String uploadClip(String key, byte[] clipData, String contentType) {
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucketName)
@@ -43,104 +45,63 @@ public class S3Service {
                     .build();
 
             s3Client.putObject(request, RequestBody.fromBytes(clipData));
-            log.info("Uploaded clip: {}", key);
+            log.info("클립 업로드 완료: eventId={}, key={}", eventId, key);
 
             return key;
         } catch (S3Exception e) {
-            log.error("Failed to upload clip {}: {}", key, e.getMessage());
+            log.error("클립 업로드 실패: eventId={}, error={}", eventId, e.getMessage());
             throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
 
     /**
-     * 이벤트 클립 업로드 (InputStream)
+     * 클립 다운로드 (clipUrl로 직접 다운로드)
+     * @param clipUrl 클립 URL (events/{eventId}/clip.mp4)
+     * @return 클립 바이트 데이터 (없으면 null)
      */
-    public String uploadEventClip(UUID eventId, InputStream inputStream, long contentLength, String contentType) {
-        String key = buildEventClipKey(eventId);
-
-        try {
-            PutObjectRequest request = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    .contentType(contentType)
-                    .contentLength(contentLength)
-                    .build();
-
-            s3Client.putObject(request, RequestBody.fromInputStream(inputStream, contentLength));
-            log.info("Uploaded clip for event: {}", eventId);
-
-            return key;
-        } catch (S3Exception e) {
-            log.error("Failed to upload clip for event {}: {}", eventId, e.getMessage());
-            throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
-        }
-    }
-
-    /**
-     * 클립 다운로드 (키 직접 지정)
-     */
-    public byte[] downloadClip(String key) {
+    public byte[] downloadClip(String clipUrl) {
         try {
             GetObjectRequest request = GetObjectRequest.builder()
                     .bucket(bucketName)
-                    .key(key)
+                    .key(clipUrl)
                     .build();
 
             return s3Client.getObjectAsBytes(request).asByteArray();
         } catch (NoSuchKeyException e) {
-            log.warn("Clip not found: {}", key);
+            log.warn("클립을 찾을 수 없음: {}", clipUrl);
             return null;
         } catch (S3Exception e) {
-            log.error("Failed to download clip {}: {}", key, e.getMessage());
+            log.error("클립 다운로드 실패: clipUrl={}, error={}", clipUrl, e.getMessage());
             throw new BusinessException(ErrorCode.S3_DOWNLOAD_FAILED);
         }
     }
 
     /**
-     * 이벤트 클립 다운로드 (deprecated - 대신 downloadClip 사용)
+     * 클립 삭제 (clipUrl로 직접 삭제)
+     * @param clipUrl 클립 URL (events/{eventId}/clip.mp4)
      */
-    @Deprecated
-    public byte[] downloadEventClip(UUID eventId) {
-        String key = buildEventClipKey(eventId);
-
-        try {
-            GetObjectRequest request = GetObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    .build();
-
-            return s3Client.getObjectAsBytes(request).asByteArray();
-        } catch (NoSuchKeyException e) {
-            log.warn("Clip not found for event: {}", eventId);
-            return null;
-        } catch (S3Exception e) {
-            log.error("Failed to download clip for event {}: {}", eventId, e.getMessage());
-            throw new BusinessException(ErrorCode.S3_DOWNLOAD_FAILED);
+    public void deleteClip(String clipUrl) {
+        if (clipUrl == null || clipUrl.isEmpty()) {
+            log.debug("삭제할 클립 URL이 없음");
+            return;
         }
-    }
-
-    /**
-     * 이벤트 클립 삭제
-     */
-    public void deleteEventClip(UUID eventId) {
-        String key = buildEventClipKey(eventId);
 
         try {
             DeleteObjectRequest request = DeleteObjectRequest.builder()
                     .bucket(bucketName)
-                    .key(key)
+                    .key(clipUrl)
                     .build();
 
             s3Client.deleteObject(request);
-            log.info("Deleted clip for event: {}", eventId);
+            log.info("클립 삭제 완료: {}", clipUrl);
         } catch (S3Exception e) {
-            log.error("Failed to delete clip for event {}: {}", eventId, e.getMessage());
+            log.error("클립 삭제 실패: clipUrl={}, error={}", clipUrl, e.getMessage());
             throw new BusinessException(ErrorCode.S3_DELETE_FAILED);
         }
     }
 
     /**
-     * 클립 존재 여부 확인
+     * 이벤트 클립 존재 여부 확인
      */
     public boolean clipExists(UUID eventId) {
         String key = buildEventClipKey(eventId);
