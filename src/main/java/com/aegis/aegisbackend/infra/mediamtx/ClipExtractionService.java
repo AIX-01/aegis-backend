@@ -42,11 +42,12 @@ public class ClipExtractionService {
     @Value("${clip.extraction.segment-count:10}")
     private int defaultSegmentCount;
 
-    // fMP4 세그먼트 패턴 (.m4s)
-    private static final Pattern SEGMENT_PATTERN = Pattern.compile("^([^#\\s].+\\.m4s)$", Pattern.MULTILINE);
+    // fMP4 세그먼트 패턴 (.mp4, init 제외)
+    private static final Pattern SEGMENT_PATTERN = Pattern.compile("^([^#\\s].+_seg\\d+\\.mp4)$", Pattern.MULTILINE);
     // 초기화 세그먼트 패턴 (#EXT-X-MAP:URI="init.mp4")
     private static final Pattern INIT_SEGMENT_PATTERN = Pattern.compile("#EXT-X-MAP:URI=\"([^\"]+)\"");
-    private static final Pattern STREAM_PLAYLIST_PATTERN = Pattern.compile("^([^#\\s].+\\.m3u8)$", Pattern.MULTILINE);
+    // 비디오 스트림 플레이리스트 패턴 (video로 시작하는 .m3u8)
+    private static final Pattern STREAM_PLAYLIST_PATTERN = Pattern.compile("#EXT-X-STREAM-INF[^\\n]*\\n([^#\\s]+\\.m3u8)", Pattern.MULTILINE);
 
     public String extractAndSaveClip(String cameraName, UUID eventId) {
         return extractAndSaveClip(cameraName, eventId, defaultSegmentCount);

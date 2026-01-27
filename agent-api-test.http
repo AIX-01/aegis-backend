@@ -1,0 +1,76 @@
+### 이벤트 생성 테스트 (Internal API)
+### cameraName은 DB에 존재하는 카메라의 실명(MediaMTX 스트림 경로명)이어야 함
+
+# 폭행 이벤트 생성 (cameraName은 MediaMTX 스트림 이름과 일치해야 함)
+POST http://localhost:8080/internal/agent/events
+Content-Type: application/json
+
+{
+  "cameraName": "cam",
+  "eventType": "assault",
+  "timestamp": "2026-01-28T14:30:00"
+}
+
+###
+
+# 절도 이벤트 생성
+POST http://localhost:8080/internal/agent/events
+Content-Type: application/json
+
+{
+  "cameraName": "cam",
+  "eventType": "burglary",
+  "timestamp": "2026-01-27T10:30:00"
+}
+
+###
+
+# 투기 이벤트 생성
+POST http://localhost:8080/internal/agent/events
+Content-Type: application/json
+
+{
+  "cameraName": "cam",
+  "eventType": "dump"
+}
+
+###
+
+# 실신 이벤트 생성
+POST http://localhost:8080/internal/agent/events
+Content-Type: application/json
+
+{
+  "cameraName": "cam",
+  "eventType": "swoon"
+}
+
+###
+
+# 파손 이벤트 생성
+POST http://localhost:8080/internal/agent/events
+Content-Type: application/json
+
+{
+  "cameraName": "cam",
+  "eventType": "vandalism"
+}
+
+###
+
+### 분석 결과 추가 (eventId를 실제 값으로 교체)
+PATCH http://localhost:8080/internal/agent/events/{{eventId}}/analysis
+Content-Type: application/json
+
+{
+  "agentAction": "경찰 신고 권장",
+  "summary": "카메라에서 파손 행위가 감지되었습니다.",
+  "analysisReport": "2026-01-26 14:30:00에 cam1 카메라에서 유리창 파손 행위가 감지되었습니다. 용의자는 검은색 후드티를 입은 남성으로 추정됩니다."
+}
+
+###
+
+### 분석 대상 카메라 목록 조회
+GET http://localhost:8080/internal/agent/cameras/analysis
+
+###
