@@ -13,6 +13,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 
 @Configuration
 @EnableWebSecurity
@@ -35,9 +36,11 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(authorize -> authorize
+                        // SSE ASYNC dispatch 요청 허용
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/signup", "/api/auth/refresh").permitAll()
-                        .requestMatchers("/internal/**").permitAll()  // 내부망 전용 (Caddy 미프록시)
-                        .requestMatchers("/error").permitAll()  // 에러 페이지 (SSE 비동기 처리 호환)
+                        .requestMatchers("/internal/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
