@@ -6,6 +6,7 @@ import com.aegis.aegisbackend.domain.auth.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,7 +32,7 @@ public class AuthController {
     private static final int REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request, HttpServletResponse response) {
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         LoginResponse loginResponse = authService.login(request);
 
         // Refresh Token을 httpOnly 쿠키로 설정
@@ -50,7 +51,7 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<Map<String, Object>> signup(@RequestBody SignupRequest request) {
+    public ResponseEntity<Map<String, Object>> signup(@Valid @RequestBody SignupRequest request) {
         authService.signup(request);
         return ResponseEntity.ok(Map.of(
                 "success", true,
@@ -99,7 +100,7 @@ public class AuthController {
     @PatchMapping("/password")
     public ResponseEntity<Map<String, Object>> changePassword(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody PasswordChangeRequest request) {
+            @Valid @RequestBody PasswordChangeRequest request) {
         UUID userId = UUID.fromString(userDetails.getUsername());
         authService.changePassword(userId, request);
         return ResponseEntity.ok(Map.of(
@@ -112,7 +113,7 @@ public class AuthController {
     @PatchMapping("/me")
     public ResponseEntity<UserDto> updateProfile(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody ProfileUpdateRequest request) {
+            @Valid @RequestBody ProfileUpdateRequest request) {
         UUID userId = UUID.fromString(userDetails.getUsername());
         UserDto user = authService.updateProfile(userId, request);
         return ResponseEntity.ok(user);

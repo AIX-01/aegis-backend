@@ -49,7 +49,12 @@ public class EventController {
         return ResponseEntity.ok(event);
     }
 
+    /**
+     * 이벤트 생성 (Admin 전용)
+     * - 일반적으로 Agent가 /internal/agent/events를 사용
+     */
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<EventDto> createEvent(@RequestBody EventDto.CreateRequest request) {
         EventDto event = eventService.createEvent(request);
         return ResponseEntity.ok(event);
@@ -127,30 +132,34 @@ public class EventController {
 
         // Range 요청 처리 (비디오 시크 지원)
         if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            String[] ranges = rangeHeader.substring(6).split("-");
-            long start = Long.parseLong(ranges[0]);
-            long end = ranges.length > 1 && !ranges[1].isEmpty()
-                    ? Long.parseLong(ranges[1])
-                    : fileSize - 1;
+            try {
+                String[] ranges = rangeHeader.substring(6).split("-");
+                long start = Long.parseLong(ranges[0]);
+                long end = ranges.length > 1 && !ranges[1].isEmpty()
+                        ? Long.parseLong(ranges[1])
+                        : fileSize - 1;
 
-            if (start >= fileSize) {
-                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
-                        .build();
+                if (start >= fileSize) {
+                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                            .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+                            .build();
+                }
+
+                end = Math.min(end, fileSize - 1);
+                long contentLength = end - start + 1;
+
+                byte[] partialData = new byte[(int) contentLength];
+                System.arraycopy(clipData, (int) start, partialData, 0, (int) contentLength);
+
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                        .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
+                        .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength))
+                        .body(partialData);
+            } catch (NumberFormatException e) {
+                return ResponseEntity.badRequest().build();
             }
-
-            end = Math.min(end, fileSize - 1);
-            long contentLength = end - start + 1;
-
-            byte[] partialData = new byte[(int) contentLength];
-            System.arraycopy(clipData, (int) start, partialData, 0, (int) contentLength);
-
-            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                    .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
-                    .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength))
-                    .body(partialData);
         }
 
         // Range 없으면 전체 반환

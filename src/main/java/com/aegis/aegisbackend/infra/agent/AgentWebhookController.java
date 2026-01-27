@@ -142,7 +142,7 @@ public class AgentWebhookController {
             notificationService.createNotificationsForEvent(savedEvent);
 
             // SSE 브로드캐스트
-            EventDto eventDto = toEventDto(savedEvent);
+            EventDto eventDto = EventDto.from(savedEvent);
             sseEmitterService.broadcastEvent(eventDto);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(eventDto);
@@ -184,7 +184,7 @@ public class AgentWebhookController {
             log.info("분석 결과 추가 완료: eventId={}", eventId);
 
             // SSE 브로드캐스트
-            EventDto eventDto = toEventDto(event);
+            EventDto eventDto = EventDto.from(event);
             sseEmitterService.broadcastEvent(eventDto);
 
             return ResponseEntity.ok(eventDto);
@@ -213,21 +213,5 @@ public class AgentWebhookController {
             default -> "이상상황";
         };
         return cameraAlias + "에서 " + typeKorean + " 감지";
-    }
-
-    private EventDto toEventDto(Event event) {
-        return EventDto.builder()
-                .id(event.getId().toString())
-                .cameraId(event.getCamera().getId().toString())
-                .cameraName(event.getCamera().getAlias())
-                .type(event.getType().getValue())
-                .timestamp(event.getTimestamp().toString())
-                .status(event.getStatus().getValue())
-                .description(event.getDescription())
-                .agentAction(event.getAgentAction())
-                .clipUrl(event.getClipUrl())
-                .summary(event.getSummary())
-                .analysisReport(event.getAnalysisReport())
-                .build();
     }
 }

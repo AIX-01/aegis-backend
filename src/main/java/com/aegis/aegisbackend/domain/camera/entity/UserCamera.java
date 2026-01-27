@@ -31,6 +31,7 @@ public class UserCamera {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class UserCameraId implements Serializable {
+        private static final long serialVersionUID = 1L;
         private UUID user;
         private UUID camera;
     }

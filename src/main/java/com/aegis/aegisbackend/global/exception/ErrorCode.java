@@ -29,7 +29,6 @@ public enum ErrorCode {
     CAMERA_NOT_FOUND(HttpStatus.NOT_FOUND, "카메라를 찾을 수 없습니다."),
     CAMERA_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 카메라에 대한 접근 권한이 없습니다."),
     CAMERA_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "카메라가 연결되어 있지 않습니다."),
-    CAMERA_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "카메라가 비활성화 상태입니다."),
 
     // Event
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "이벤트를 찾을 수 없습니다."),
