@@ -4,9 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -18,6 +20,28 @@ public class GlobalExceptionHandler {
         log.error("BusinessException: {}", e.getMessage());
         return ResponseEntity
                 .status(e.getErrorCode().getStatus())
+                .body(Map.of("error", e.getMessage()));
+    }
+
+    // @Valid 검증 실패 핸들러
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidationException(MethodArgumentNotValidException e) {
+        log.warn("Validation failed: {}", e.getMessage());
+        Map<String, String> fieldErrors = new HashMap<>();
+        e.getBindingResult().getFieldErrors().forEach(error ->
+            fieldErrors.put(error.getField(), error.getDefaultMessage())
+        );
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of("error", "입력값 검증 실패", "fields", fieldErrors));
+    }
+
+    // Enum 파싱 등 IllegalArgumentException 핸들러
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("IllegalArgumentException: {}", e.getMessage());
+        return ResponseEntity
+                .badRequest()
                 .body(Map.of("error", e.getMessage()));
     }
 

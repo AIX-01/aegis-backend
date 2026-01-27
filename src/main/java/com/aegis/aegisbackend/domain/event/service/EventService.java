@@ -53,7 +53,7 @@ public class EventService {
         }
 
         return events.stream()
-                .map(this::toEventDto)
+                .map(EventDto::from)
                 .toList();
     }
 
@@ -62,7 +62,7 @@ public class EventService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-        return toEventDto(event);
+        return EventDto.from(event);
     }
 
 
@@ -110,7 +110,7 @@ public class EventService {
         notificationService.createNotificationsForEvent(savedEvent);
 
         // SSE로 이벤트 생성 브로드캐스트
-        EventDto eventDto = toEventDto(savedEvent);
+        EventDto eventDto = EventDto.from(savedEvent);
         sseEmitterService.broadcastEvent(eventDto);
 
         return eventDto;
@@ -126,7 +126,7 @@ public class EventService {
         log.info("Event {} status updated to: {}", eventId, status);
 
         // SSE로 이벤트 상태 변경 브로드캐스트
-        EventDto eventDto = toEventDto(event);
+        EventDto eventDto = EventDto.from(event);
         sseEmitterService.broadcastEvent(eventDto);
 
         return eventDto;
@@ -164,21 +164,5 @@ public class EventService {
 
         // SSE로 이벤트 삭제 브로드캐스트
         sseEmitterService.broadcastEventDeleted(eventId.toString());
-    }
-
-    private EventDto toEventDto(Event event) {
-        return EventDto.builder()
-                .id(event.getId().toString())
-                .cameraId(event.getCamera().getId().toString())
-                .cameraName(event.getCamera().getAlias())
-                .type(event.getType().getValue())
-                .timestamp(event.getTimestamp().toString())
-                .status(event.getStatus().getValue())
-                .description(event.getDescription())
-                .agentAction(event.getAgentAction())
-                .clipUrl(event.getClipUrl())
-                .summary(event.getSummary())
-                .analysisReport(event.getAnalysisReport())
-                .build();
     }
 }

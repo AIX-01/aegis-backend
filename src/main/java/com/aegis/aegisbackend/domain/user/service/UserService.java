@@ -120,7 +120,8 @@ public class UserService {
         return userDto;
     }
 
-    private UserDto toUserDto(User user) {
+    /** User 엔티티를 UserDto로 변환 */
+    public UserDto toUserDto(User user) {
         List<String> assignedCameras;
 
         if (user.getRole() == UserRole.ADMIN) {

@@ -33,11 +33,11 @@ public interface CameraRepository extends JpaRepository<Camera, UUID> {
     @Query("SELECT c FROM Camera c WHERE c.id IN :ids")
     List<Camera> findByIdIn(@Param("ids") List<UUID> ids);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE Camera c SET c.connected = :connected WHERE c.name NOT IN :names")
     int updateConnectedForCamerasNotInNames(@Param("connected") boolean connected, @Param("names") List<String> names);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE Camera c SET c.connected = true WHERE c.name IN :names")
     int updateConnectedTrueForCamerasInNames(@Param("names") List<String> names);
 
