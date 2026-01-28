@@ -30,6 +30,9 @@ public interface CameraRepository extends JpaRepository<Camera, UUID> {
 
     List<Camera> findByConnectedAndEnabled(boolean connected, boolean enabled);
 
+    /** 분석 대상 카메라 조회 (connected=true AND enabled=true AND analysisEnabled=true) */
+    List<Camera> findByConnectedAndEnabledAndAnalysisEnabled(boolean connected, boolean enabled, boolean analysisEnabled);
+
     @Query("SELECT c FROM Camera c WHERE c.id IN :ids")
     List<Camera> findByIdIn(@Param("ids") List<UUID> ids);
 

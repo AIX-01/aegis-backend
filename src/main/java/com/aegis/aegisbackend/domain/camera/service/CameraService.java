@@ -13,11 +13,13 @@ import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -37,6 +39,9 @@ public class CameraService {
     private final UserCameraRepository userCameraRepository;
     private final SseEmitterService sseEmitterService;
     private final RedisTokenService redisTokenService;
+
+    @Value("${mediamtx.webrtc-url:/stream}")
+    private String webrtcBaseUrl;
 
     @Transactional(readOnly = true)
     public List<CameraDto> getAllCameras(UUID userId) {
@@ -100,9 +105,9 @@ public class CameraService {
         cameraRepository.save(camera);
         log.info("카메라 수정: {}", cameraId);
 
-        // 분석 상태가 변경된 경우 Redis Pub/Sub 발행 (Python Agent에게 알림)
+        // 분석 상태가 변경된 경우 Redis에 목록 저장 + Pub/Sub 발행
         if (analysisStateChanged) {
-            redisTokenService.publishCameraAnalysisUpdate();
+            syncAnalysisCamerasToRedis();
         }
 
         // SSE로 카메라 업데이트 브로드캐스트
@@ -110,6 +115,20 @@ public class CameraService {
         sseEmitterService.broadcastCamera(updatedDto);
 
         return updatedDto;
+    }
+
+    /**
+     * 분석 대상 카메라 목록을 Redis에 저장하고 Pub/Sub 알림 발행
+     */
+    public void syncAnalysisCamerasToRedis() {
+        List<Camera> analysisCameras = cameraRepository
+                .findByConnectedAndEnabledAndAnalysisEnabled(true, true, true);
+
+        List<Map<String, String>> cameraList = analysisCameras.stream()
+                .map(c -> Map.of("name", c.getName(), "alias", c.getAlias()))
+                .toList();
+
+        redisTokenService.saveAnalysisCamerasAndNotify(cameraList);
     }
 
     @Transactional(readOnly = true)
@@ -130,6 +149,7 @@ public class CameraService {
                 .alias(camera.getAlias())
                 .enabled(camera.getEnabled())
                 .analysisEnabled(camera.getAnalysisEnabled())
+                .streamUrl(webrtcBaseUrl + "/" + camera.getName() + "/whep")
                 .build();
     }
 }

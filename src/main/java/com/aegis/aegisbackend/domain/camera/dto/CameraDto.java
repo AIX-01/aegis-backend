@@ -16,6 +16,7 @@ public class CameraDto {
     private String alias;
     private Boolean enabled;
     private Boolean analysisEnabled;
+    private String streamUrl;  // WebRTC WHEP URL
 
     @Data
     @NoArgsConstructor
