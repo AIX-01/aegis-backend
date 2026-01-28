@@ -21,8 +21,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * MediaMTX 통합 인증 컨트롤러 (내부망 전용)
- * - 프로토콜별 인증 처리 (SRT, RTSP, HLS, WebRTC)
+ * MediaMTX 통합 인증 컨트롤러
+ * - SRT publish: 외부에서 스트림 수신 (ID/PW 인증)
+ * - WebRTC read: 프론트엔드 스트리밍 (JWT 인증)
+ * - RTSP/HLS read: 내부용 (인증 없음)
  * - 카메라 동기화 트리거
  */
 @Slf4j
@@ -56,7 +58,7 @@ public class MediaMTXWebhookController {
 
     /**
      * MediaMTX 통합 인증
-     * - SRT publish: 고정 ID/PW 인증
+     * - SRT publish: 고정 ID/PW 인증 (streamid=publish:path:user:password)
      * - RTSP/HLS read: 인증 없이 통과 (내부용)
      * - WebRTC read: JWT 인증 + 카메라 권한 확인
      */
