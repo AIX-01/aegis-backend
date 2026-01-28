@@ -10,6 +10,7 @@ import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,9 +21,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * MediaMTX 컨트롤러 (내부망 전용)
- * - 카메라 추가/삭제 알림 수신 → 동기화 트리거
- * - 스트림 인증 검증 (Basic Auth + JWT)
+ * MediaMTX 통합 인증 컨트롤러 (내부망 전용)
+ * - 프로토콜별 인증 처리 (SRT, RTSP, HLS, WebRTC)
+ * - 카메라 동기화 트리거
  */
 @Slf4j
 @RestController
@@ -36,8 +37,14 @@ public class MediaMTXWebhookController {
     private final CameraRepository cameraRepository;
     private final UserCameraRepository userCameraRepository;
 
+    @Value("${mediamtx.srt-user}")
+    private String srtUser;
+
+    @Value("${mediamtx.srt-password}")
+    private String srtPassword;
+
     /**
-     * 카메라 동기화 트리거 (단일 엔드포인트)
+     * 카메라 동기화 트리거
      */
     @PostMapping("/sync")
     public ResponseEntity<Map<String, Boolean>> handleSyncTrigger(
@@ -48,42 +55,60 @@ public class MediaMTXWebhookController {
     }
 
     /**
-     * 스트림 인증 검증 (Basic Auth + JWT)
-     * - password 필드에서 JWT 추출
-     * - JWT 검증 후 사용자 카메라 접근 권한 확인
+     * MediaMTX 통합 인증
+     * - SRT publish: 고정 ID/PW 인증
+     * - RTSP/HLS read: 인증 없이 통과 (내부용)
+     * - WebRTC read: JWT 인증 + 카메라 권한 확인
      */
     @PostMapping("/auth")
     public ResponseEntity<?> validateAuth(@RequestBody MediaMTXAuthRequest request) {
-        String path = request.getPath();
-        String action = request.getAction();
         String protocol = request.getProtocol();
+        String action = request.getAction();
+        String path = request.getPath();
 
-        // publish 액션은 MediaMTX 내부 인증 사용 (authInternalUsers)
-        if ("publish".equals(action)) {
-            log.debug("MediaMTX publish 인증: path={}, 내부 인증 사용", path);
+        log.debug("MediaMTX 인증 요청: protocol={}, action={}, path={}", protocol, action, path);
+
+        // 1. RTSP/HLS read → 인증 없이 통과 (내부용)
+        if (("rtsp".equals(protocol) || "hls".equals(protocol)) && "read".equals(action)) {
+            log.debug("MediaMTX 인증 성공: 내부 프로토콜, protocol={}, path={}", protocol, path);
             return ResponseEntity.ok().build();
         }
 
-        // 내부 프로토콜(rtsp, hls)은 인증 없이 통과 (MediaMTX 내부 사용)
-        if ("rtsp".equals(protocol) || "hls".equals(protocol)) {
-            log.debug("MediaMTX 내부 프로토콜 인증: path={}, protocol={}, 통과", path, protocol);
-            return ResponseEntity.ok().build();
+        // 2. SRT publish → 고정 ID/PW 확인
+        if ("srt".equals(protocol) && "publish".equals(action)) {
+            if (srtUser.equals(request.getUser()) && srtPassword.equals(request.getPassword())) {
+                log.info("MediaMTX 인증 성공: SRT publish, path={}", path);
+                return ResponseEntity.ok().build();
+            }
+            log.warn("MediaMTX 인증 실패: SRT 인증 정보 불일치, path={}", path);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // Basic Auth의 password 필드에서 JWT 추출
+        // 3. WebRTC read → JWT 검증 + 카메라 권한 확인
+        if ("webrtc".equals(protocol) && "read".equals(action)) {
+            return validateWebRtcAuth(request, path);
+        }
+
+        // 그 외 → 거부
+        log.warn("MediaMTX 인증 실패: 허용되지 않은 요청, protocol={}, action={}, path={}", protocol, action, path);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    /**
+     * WebRTC JWT 인증 및 카메라 권한 확인
+     */
+    private ResponseEntity<?> validateWebRtcAuth(MediaMTXAuthRequest request, String path) {
         String jwt = request.getPassword();
         if (jwt == null || jwt.isEmpty()) {
             log.warn("MediaMTX 인증 실패: JWT 없음, path={}", path);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // JWT 검증
         if (!jwtTokenProvider.validateToken(jwt)) {
             log.warn("MediaMTX 인증 실패: 유효하지 않은 JWT, path={}", path);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // JWT에서 userId 추출
         String userIdStr = jwtTokenProvider.getUserId(jwt);
         UUID userId;
         try {
@@ -93,7 +118,6 @@ public class MediaMTXWebhookController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // 사용자 조회
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             log.warn("MediaMTX 인증 실패: 사용자 없음, userId={}, path={}", userId, path);
@@ -103,11 +127,11 @@ public class MediaMTXWebhookController {
 
         // ADMIN은 모든 카메라 접근 가능
         if (user.getRole() == UserRole.ADMIN) {
-            log.info("MediaMTX 인증 성공: ADMIN, path={}", path);
+            log.info("MediaMTX 인증 성공: ADMIN WebRTC, path={}", path);
             return ResponseEntity.ok().build();
         }
 
-        // USER는 할당된 카메라만 접근 가능 (path = 카메라 name)
+        // USER는 할당된 카메라만 접근 가능
         Optional<Camera> cameraOpt = cameraRepository.findByName(path);
         if (cameraOpt.isEmpty()) {
             log.warn("MediaMTX 인증 실패: 카메라 없음, path={}", path);
@@ -121,7 +145,7 @@ public class MediaMTXWebhookController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        log.info("MediaMTX 인증 성공: userId={}, path={}", userId, path);
+        log.info("MediaMTX 인증 성공: USER WebRTC, userId={}, path={}", userId, path);
         return ResponseEntity.ok().build();
     }
 }

@@ -176,23 +176,38 @@ flowchart LR
 
 ### 인증
 
-**SRT 송출 인증 (authInternalUsers):**
+모든 인증을 Spring Boot로 위임하여 통합 관리합니다.
 
-| 사용자 | 비밀번호 | 권한 |
-|--------|----------|------|
-| aegis | trillion | publish |
+**MediaMTX → Spring 인증 요청:**
 
-**WebRTC 시청 인증 (authHTTPAddress):**
+```
+POST /internal/mediamtx/auth
+Content-Type: application/json
 
-- `POST http://host.docker.internal:8080/internal/mediamtx/auth`
-- Spring Boot에서 JWT 검증 + 카메라 접근 권한 확인
+{
+  "user": "사용자명",
+  "password": "비밀번호 또는 JWT",
+  "action": "publish | read",
+  "path": "카메라 경로",
+  "protocol": "srt | rtsp | hls | webrtc"
+}
+```
 
-**RTSP/HLS 읽기 (내부 전용, 인증 없음):**
+**프로토콜별 인증 처리:**
 
-| 프로토콜 | 용도 | 인증 |
-|----------|------|------|
-| RTSP | Python Agent 프레임 캡처 | 없음 |
-| HLS | Spring 클립 추출 | 없음 |
+| 프로토콜 | action | 인증 방식 | 설명 |
+|----------|--------|----------|------|
+| SRT | publish | ID/PW | 환경변수 `MEDIAMTX_SRT_USER`, `MEDIAMTX_SRT_PASSWORD` |
+| RTSP | read | 없음 | Python Agent 프레임 캡처용 (내부) |
+| HLS | read | 없음 | Spring 클립 추출용 (내부) |
+| WebRTC | read | JWT | Basic Auth password 필드에 JWT 전달 |
+
+**SRT 인증 환경변수:**
+
+| 환경변수 | 기본값 | 설명 |
+|----------|--------|------|
+| MEDIAMTX_SRT_USER | aegis | SRT 송출 사용자명 |
+| MEDIAMTX_SRT_PASSWORD | trillion | SRT 송출 비밀번호 |
 
 ### 스트림 훅
 
@@ -209,7 +224,7 @@ flowchart LR
 
 | 설정 | 값 | 설명 |
 |------|-----|------|
-| webrtcICEHostNAT1To1IPs | [127.0.0.1] | ICE 후보 IP (개발용) |
-| webrtcICEUDPMuxAddress | :8189 | UDP 멀티플렉싱 |
+| webrtcAdditionalHosts | [127.0.0.1] | ICE 후보 IP (개발용) |
+| webrtcLocalUDPAddress | :8189 | UDP 멀티플렉싱 |
 
 **주의:** H264 인코딩 시 B-frame 비활성화 필수 (`-tune zerolatency` 또는 `-profile:v baseline`)
