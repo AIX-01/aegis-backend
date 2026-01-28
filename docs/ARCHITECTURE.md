@@ -75,8 +75,8 @@ flowchart LR
 | SRT | 8890/udp | 원격 MTX에서 스트림 수신 |
 | WebRTC WHEP | 8889 | 시그널링 |
 | WebRTC ICE | 8189/udp | 미디어 |
-| HLS | 8888 | 클립 추출, 웹 재생 |
-| RTSP | 8554 | 내부 스트림 재생 (FFmpeg 소스) |
+| HLS | 8888 | Spring 클립 추출용 (내부) |
+| RTSP | 8554 | Python Agent 프레임 캡처용 (내부) |
 | API | 9997 | 카메라 목록 조회 |
 
 ---
@@ -121,7 +121,7 @@ flowchart LR
 
 1. Agent: Redis `camera:analysis:update` 채널 구독
 2. Agent: Redis에서 분석 카메라 목록 조회 (`GET analysis:cameras`)
-3. Agent: RTSP로 MediaMTX에 직접 연결 (`rtsp://mediamtx:8554/{cam}`)
+3. Agent: RTSP로 MediaMTX에 직접 연결 (`rtsp://localhost:8554/{cam}`, 인증 없음)
 4. Agent: 1fps 캡처, 640x360 리사이즈, 8프레임 버퍼링
 5. Agent: AI 분석 수행
 6. Agent → Spring Boot: `POST /internal/agent/events` → Event (클립 자동 추출 포함)
@@ -162,29 +162,37 @@ flowchart LR
 
 ## MediaMTX 설정
 
-### HLS 녹화
+### HLS 클립 추출 설정
 
 | 설정 | 값 | 설명 |
 |------|-----|------|
 | hlsSegmentCount | 10 | 유지 세그먼트 수 |
 | hlsSegmentDuration | 3s | 세그먼트 길이 |
-| hlsPartDuration | 200ms | LL-HLS 파트 길이 |
 | hlsSegmentMaxSize | 50M | 세그먼트 최대 크기 |
 | hlsDirectory | /recordings | 저장 경로 |
+| hlsVariant | fmp4 | Fragmented MP4 (FFmpeg 변환 용이) |
 
-→ 3초 × 10개 = 최근 30초 보관
+→ 3초 × 10개 = 최근 30초 보관 (Spring에서 이벤트 발생 시 클립 추출)
 
 ### 인증
 
-**송출 인증 (authInternalUsers):**
+**SRT 송출 인증 (authInternalUsers):**
 
 | 사용자 | 비밀번호 | 권한 |
 |--------|----------|------|
-| aegis | trillion | publish, read, playback |
+| aegis | trillion | publish |
 
-**시청 인증 (authHTTPAddress):**
+**WebRTC 시청 인증 (authHTTPAddress):**
 
 - `POST http://host.docker.internal:8080/internal/mediamtx/auth`
+- Spring Boot에서 JWT 검증 + 카메라 접근 권한 확인
+
+**RTSP/HLS 읽기 (내부 전용, 인증 없음):**
+
+| 프로토콜 | 용도 | 인증 |
+|----------|------|------|
+| RTSP | Python Agent 프레임 캡처 | 없음 |
+| HLS | Spring 클립 추출 | 없음 |
 
 ### 스트림 훅
 
@@ -196,7 +204,6 @@ flowchart LR
 
 - `curl -X POST /internal/mediamtx/sync` (동기화 트리거)
 
-> Python Agent는 Redis Pub/Sub로 알림을 받아 RTSP로 직접 캡처합니다.
 
 ### WebRTC 설정
 
