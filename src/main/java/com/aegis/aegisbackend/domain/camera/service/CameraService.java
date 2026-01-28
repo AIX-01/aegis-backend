@@ -13,6 +13,7 @@ import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,9 @@ public class CameraService {
     private final UserCameraRepository userCameraRepository;
     private final SseEmitterService sseEmitterService;
     private final RedisTokenService redisTokenService;
+
+    @Value("${mediamtx.webrtc-url:/stream}")
+    private String webrtcBaseUrl;
 
     @Transactional(readOnly = true)
     public List<CameraDto> getAllCameras(UUID userId) {
@@ -130,6 +134,7 @@ public class CameraService {
                 .alias(camera.getAlias())
                 .enabled(camera.getEnabled())
                 .analysisEnabled(camera.getAnalysisEnabled())
+                .streamUrl(webrtcBaseUrl + "/" + camera.getName() + "/whep")
                 .build();
     }
 }
