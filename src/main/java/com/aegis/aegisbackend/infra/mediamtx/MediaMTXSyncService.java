@@ -2,6 +2,7 @@ package com.aegis.aegisbackend.infra.mediamtx;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
+import com.aegis.aegisbackend.domain.camera.service.CameraService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.infra.redis.RedisTokenService;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
  * - 새 카메라는 비활성화 상태로 추가
  * - 연결 해제된 카메라는 오프라인 처리
  * - 동기화 완료 시 SSE로 프론트엔드에 알림
- * - Redis Pub/Sub으로 Python Agent에 알림
+ * - Redis에 분석 대상 카메라 목록 저장 + Pub/Sub으로 Python Agent에 알림
  */
 @Slf4j
 @Service
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 public class MediaMTXSyncService {
 
     private final CameraRepository cameraRepository;
+    private final CameraService cameraService;
     private final RedisTokenService redisTokenService;
     private final WebClient.Builder webClientBuilder;
     private final SseEmitterService sseEmitterService;
@@ -103,11 +105,11 @@ public class MediaMTXSyncService {
 
             log.info("카메라 동기화 완료: MediaMTX={}, DB={}", mtxCameras.size(), dbCameras.size());
 
-            // 변경 시 SSE 알림 및 Redis Pub/Sub 발행
+            // 변경 시 SSE 알림 및 Redis에 분석 목록 동기화
             if (hasChanges) {
                 sseEmitterService.broadcastCamera("refresh");
-                redisTokenService.publishCameraAnalysisUpdate();
-                log.info("카메라 목록 갱신 SSE 및 Pub/Sub 전송");
+                cameraService.syncAnalysisCamerasToRedis();
+                log.info("카메라 목록 갱신 SSE 및 Redis 동기화 완료");
             }
 
         } catch (Exception e) {
