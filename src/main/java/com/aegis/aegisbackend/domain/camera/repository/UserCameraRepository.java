@@ -8,14 +8,17 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface UserCameraRepository extends JpaRepository<UserCamera, UserCamera.UserCameraId> {
+public interface UserCameraRepository extends JpaRepository<UserCamera, UUID> {
 
     List<UserCamera> findByUserId(UUID userId);
 
     List<UserCamera> findByCameraId(UUID cameraId);
+
+    Optional<UserCamera> findByUserIdAndCameraId(UUID userId, UUID cameraId);
 
     @Modifying
     @Query("DELETE FROM UserCamera uc WHERE uc.user.id = :userId")
