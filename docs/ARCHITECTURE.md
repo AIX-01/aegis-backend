@@ -197,10 +197,18 @@ Content-Type: application/json
 
 | 프로토콜 | action | 인증 방식 | 설명 |
 |----------|--------|----------|------|
-| SRT | publish | ID/PW | 환경변수 `MEDIAMTX_SRT_USER`, `MEDIAMTX_SRT_PASSWORD` |
+| SRT | publish | ID/PW | `streamid=publish:path:user:password` 형식 |
 | RTSP | read | 없음 | Python Agent 프레임 캡처용 (내부) |
 | HLS | read | 없음 | Spring 클립 추출용 (내부) |
 | WebRTC | read | JWT | Basic Auth password 필드에 JWT 전달 |
+
+**SRT 송출 URL 형식:**
+
+```
+srt://host:8890?streamid=publish:카메라명:사용자:비밀번호
+```
+
+예시: `srt://host:8890?streamid=publish:cam:aegis:trillion`
 
 **SRT 인증 환경변수:**
 
