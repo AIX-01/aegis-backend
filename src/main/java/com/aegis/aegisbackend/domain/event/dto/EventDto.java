@@ -6,6 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+import java.util.Map;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -14,50 +17,32 @@ public class EventDto {
     private String id;
     private String cameraId;
     private String cameraName;
-    private String type; // "assault" | "burglary" | "dump" | "swoon" | "vandalism"
-    private String timestamp;
-    private String status; // "processing" | "resolved"
-    private String description;
-    private String agentAction;
+    private String risk;
+    private String type;
+    private String occurredAt;
+    private String status;
     private String clipUrl;
     private String summary;
-    private String analysisReport;
+    private String riskScore;
+    private List<Map<String, Object>> actions;
+    private List<Map<String, Object>> ragReferences;
+    private String report;
 
-    // Entity -> DTO 변환
     public static EventDto from(Event event) {
         return EventDto.builder()
                 .id(event.getId().toString())
                 .cameraId(event.getCamera().getId().toString())
                 .cameraName(event.getCamera().getLocation())
+                .risk(event.getRisk().getValue())
                 .type(event.getType().getValue())
-                .timestamp(event.getTimestamp().toString())
+                .occurredAt(event.getOccurredAt().toString())
                 .status(event.getStatus().getValue())
-                .description(event.getDescription())
-                .agentAction(event.getAgentAction())
                 .clipUrl(event.getClipUrl())
                 .summary(event.getSummary())
-                .analysisReport(event.getAnalysisReport())
+                .riskScore(event.getRiskScore())
+                .actions(event.getActions())
+                .ragReferences(event.getRagReferences())
+                .report(event.getReport())
                 .build();
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class CreateRequest {
-        private String cameraId;
-        private String type;
-        private String timestamp;
-        private String description;
-        private String agentAction;
-        private String summary;
-        private String analysisReport;
-        private byte[] clipData;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class UpdateStatusRequest {
-        private String status;
     }
 }

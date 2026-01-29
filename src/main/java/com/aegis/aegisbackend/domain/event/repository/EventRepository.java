@@ -13,23 +13,22 @@ import java.util.UUID;
 @Repository
 public interface EventRepository extends JpaRepository<Event, UUID> {
 
-    @Query("SELECT e FROM Event e JOIN FETCH e.camera ORDER BY e.timestamp DESC")
+    @Query("SELECT e FROM Event e JOIN FETCH e.camera ORDER BY e.occurredAt DESC")
     List<Event> findAllWithCamera();
 
-    @Query("SELECT e FROM Event e JOIN FETCH e.camera WHERE e.camera.id IN :cameraIds ORDER BY e.timestamp DESC")
+    @Query("SELECT e FROM Event e JOIN FETCH e.camera WHERE e.camera.id IN :cameraIds ORDER BY e.occurredAt DESC")
     List<Event> findByCameraIdInWithCamera(@Param("cameraIds") List<UUID> cameraIds);
 
 
     @Query("SELECT e.type, COUNT(e) FROM Event e GROUP BY e.type")
     List<Object[]> countByEventType();
 
-    @Query("SELECT FUNCTION('DATE', e.timestamp) as date, COUNT(e) FROM Event e WHERE e.timestamp >= :startDate GROUP BY FUNCTION('DATE', e.timestamp)")
+    @Query("SELECT FUNCTION('DATE', e.occurredAt) as date, COUNT(e) FROM Event e WHERE e.occurredAt >= :startDate GROUP BY FUNCTION('DATE', e.occurredAt)")
     List<Object[]> countByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    @Query("SELECT FUNCTION('DATE', e.timestamp) as date, COUNT(e) FROM Event e WHERE e.timestamp >= :startDate AND (e.type = 'ASSAULT' OR e.type = 'BURGLARY') GROUP BY FUNCTION('DATE', e.timestamp)")
+    @Query("SELECT FUNCTION('DATE', e.occurredAt) as date, COUNT(e) FROM Event e WHERE e.occurredAt >= :startDate AND (e.type = 'ASSAULT' OR e.type = 'BURGLARY') GROUP BY FUNCTION('DATE', e.occurredAt)")
     List<Object[]> countAlertsByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    @Query("SELECT FUNCTION('DAYOFWEEK', e.timestamp) as dayOfWeek, COUNT(e), SUM(CASE WHEN e.status = 'RESOLVED' THEN 1 ELSE 0 END) FROM Event e WHERE e.timestamp >= :startDate GROUP BY FUNCTION('DAYOFWEEK', e.timestamp)")
+    @Query("SELECT FUNCTION('DAYOFWEEK', e.occurredAt) as dayOfWeek, COUNT(e), SUM(CASE WHEN e.status = 'ANALYZED' THEN 1 ELSE 0 END) FROM Event e WHERE e.occurredAt >= :startDate GROUP BY FUNCTION('DAYOFWEEK', e.occurredAt)")
     List<Object[]> countByDayOfWeekSince(@Param("startDate") LocalDateTime startDate);
 }
-

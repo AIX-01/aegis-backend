@@ -23,9 +23,8 @@ import java.util.UUID;
 
 /**
  * 이벤트 API
- * - 위험/이상 상황 이벤트 조회 및 관리
- * - 클립 다운로드 및 스트리밍 재생
- * - 이벤트 = 메타데이터 + 클립이 함께 있는 단일 객체
+ * - 이벤트 조회/삭제
+ * - 클립 다운로드/스트리밍
  */
 @RestController
 @RequestMapping("/api/events")
@@ -49,31 +48,6 @@ public class EventController {
         return ResponseEntity.ok(event);
     }
 
-    /**
-     * 이벤트 생성 (Admin 전용)
-     * - 일반적으로 Agent가 /internal/agent/events를 사용
-     */
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<EventDto> createEvent(@RequestBody EventDto.CreateRequest request) {
-        EventDto event = eventService.createEvent(request);
-        return ResponseEntity.ok(event);
-    }
-
-    @PatchMapping("/{id}/status")
-    public ResponseEntity<EventDto> updateEventStatus(
-            @PathVariable UUID id,
-            @RequestBody EventDto.UpdateStatusRequest request) {
-        EventDto event = eventService.updateEventStatus(id, request.getStatus());
-        return ResponseEntity.ok(event);
-    }
-
-    /**
-     * 이벤트 삭제 (Admin 전용)
-     * - S3에서 클립 삭제
-     * - DB에서 연관 알림 삭제
-     * - DB에서 이벤트 삭제
-     */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> deleteEvent(@PathVariable UUID id) {
@@ -82,8 +56,7 @@ public class EventController {
     }
 
     /**
-     * 클립 다운로드 (attachment)
-     * - Content-Disposition: attachment → 브라우저가 파일 다운로드
+     * 클립 다운로드
      */
     @GetMapping("/{id}/clip")
     public ResponseEntity<byte[]> downloadClip(@PathVariable UUID id) {
@@ -107,9 +80,7 @@ public class EventController {
     }
 
     /**
-     * 클립 스트리밍 재생 (inline)
-     * - Content-Disposition: inline → 브라우저가 비디오 재생
-     * - Range 요청 지원으로 시크(seek) 가능
+     * 클립 스트리밍 (Range 지원)
      */
     @GetMapping("/{id}/clip/stream")
     public ResponseEntity<byte[]> streamClip(
@@ -130,7 +101,6 @@ public class EventController {
 
         long fileSize = clipData.length;
 
-        // Range 요청 처리 (비디오 시크 지원)
         if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
             try {
                 String[] ranges = rangeHeader.substring(6).split("-");
@@ -162,7 +132,6 @@ public class EventController {
             }
         }
 
-        // Range 없으면 전체 반환
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
