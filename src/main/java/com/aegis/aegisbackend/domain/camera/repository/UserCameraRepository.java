@@ -20,11 +20,11 @@ public interface UserCameraRepository extends JpaRepository<UserCamera, UUID> {
 
     Optional<UserCamera> findByUserIdAndCameraId(UUID userId, UUID cameraId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM UserCamera uc WHERE uc.user.id = :userId")
     void deleteByUserId(@Param("userId") UUID userId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM UserCamera uc WHERE uc.camera.id = :cameraId")
     void deleteByCameraId(@Param("cameraId") UUID cameraId);
 
