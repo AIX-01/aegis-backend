@@ -25,7 +25,7 @@ import java.util.UUID;
 /**
  * 카메라 서비스
  * - 카메라 목록 조회 (권한에 따라)
- * - 카메라 정보 수정 (별칭, 활성화)
+ * - 카메라 정보 수정 (장소, 활성화)
  * - 카메라 변경 시 SSE로 실시간 알림
  * - 분석 상태 변경 시 Redis Pub/Sub 발행
  */
@@ -52,12 +52,12 @@ public class CameraService {
                 ? cameraRepository.findAll()
                 : cameraRepository.findByIdIn(userCameraRepository.findCameraIdsByUserId(userId));
 
-        // 정렬: 1) connected DESC, 2) enabled DESC, 3) alias ASC
+        // 정렬: 1) connected DESC, 2) enabled DESC, 3) location ASC
         return cameras.stream()
                 .sorted(Comparator
                         .comparing(Camera::getConnected, Comparator.reverseOrder())
                         .thenComparing(Camera::getEnabled, Comparator.reverseOrder())
-                        .thenComparing(Camera::getAlias, String.CASE_INSENSITIVE_ORDER))
+                        .thenComparing(Camera::getLocation, String.CASE_INSENSITIVE_ORDER))
                 .map(this::toDto)
                 .toList();
     }
@@ -76,8 +76,8 @@ public class CameraService {
 
         boolean analysisStateChanged = false;
 
-        if (request.getAlias() != null) {
-            camera.setAlias(request.getAlias());
+        if (request.getLocation() != null) {
+            camera.setLocation(request.getLocation());
         }
         if (request.getEnabled() != null) {
             boolean wasAnalysisEnabled = camera.getEnabled() && camera.getAnalysisEnabled();
@@ -125,28 +125,22 @@ public class CameraService {
                 .findByConnectedAndEnabledAndAnalysisEnabled(true, true, true);
 
         List<Map<String, String>> cameraList = analysisCameras.stream()
-                .map(c -> Map.of("name", c.getName(), "alias", c.getAlias()))
+                .map(c -> Map.of(
+                        "id", c.getId().toString(),
+                        "name", c.getName(),
+                        "location", c.getLocation()))
                 .toList();
 
         redisTokenService.saveAnalysisCamerasAndNotify(cameraList);
     }
 
-    @Transactional(readOnly = true)
-    public long countEnabledCameras() {
-        return cameraRepository.findByConnectedAndEnabled(true, true).size();
-    }
-
-    @Transactional(readOnly = true)
-    public long countTotalCameras() {
-        return cameraRepository.count();
-    }
 
     private CameraDto toDto(Camera camera) {
         return CameraDto.builder()
                 .id(camera.getId().toString())
                 .name(camera.getName())
                 .connected(camera.getConnected())
-                .alias(camera.getAlias())
+                .location(camera.getLocation())
                 .enabled(camera.getEnabled())
                 .analysisEnabled(camera.getAnalysisEnabled())
                 .streamUrl(webrtcBaseUrl + "/" + camera.getName() + "/whep")

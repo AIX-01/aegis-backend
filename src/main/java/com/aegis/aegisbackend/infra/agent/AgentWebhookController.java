@@ -119,7 +119,7 @@ public class AgentWebhookController {
                     .type(EventType.fromValue(request.getEventType()))
                     .timestamp(timestamp)
                     .status(EventStatus.PROCESSING)
-                    .description(generateDescription(request.getEventType(), camera.getAlias()))
+                    .description(generateDescription(request.getEventType(), camera.getLocation()))
                     .build();
 
             Event savedEvent = eventRepository.save(event);
