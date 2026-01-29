@@ -118,17 +118,11 @@ public class NotificationService {
         assignedUsers.addAll(admins);
         List<User> uniqueUsers = assignedUsers.stream().distinct().toList();
 
-        // 알림 타입 결정
-        NotificationType notificationType = switch (event.getType()) {
-            case ASSAULT, BURGLARY -> NotificationType.ALERT;
-            case DUMP, SWOON, VANDALISM -> NotificationType.WARNING;
-        };
-
         String title = getEventTitle(event.getType());
-        String message = String.format("[%s] %s", camera.getAlias(), event.getDescription());
+        String message = String.format("[%s] %s", camera.getLocation(), event.getDescription());
 
         for (User user : uniqueUsers) {
-            createNotification(user.getId(), event.getId(), notificationType, title, message);
+            createNotification(user.getId(), event.getId(), NotificationType.INFO, title, message);
         }
         log.info("이벤트 알림 생성 완료: eventId={}, users={}", event.getId(), uniqueUsers.size());
     }

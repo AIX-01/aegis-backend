@@ -119,7 +119,7 @@ public class AgentWebhookController {
                     .type(EventType.fromValue(request.getEventType()))
                     .timestamp(timestamp)
                     .status(EventStatus.PROCESSING)
-                    .description(generateDescription(request.getEventType(), camera.getAlias()))
+                    .description(generateDescription(request.getEventType(), camera.getLocation()))
                     .build();
 
             Event savedEvent = eventRepository.save(event);
@@ -203,7 +203,7 @@ public class AgentWebhookController {
     /**
      * 이벤트 타입에 따른 기본 설명 생성
      */
-    private String generateDescription(String eventType, String cameraAlias) {
+    private String generateDescription(String eventType, String cameraLocation) {
         String typeKorean = switch (eventType.toLowerCase()) {
             case "assault" -> "폭행";
             case "burglary" -> "절도";
@@ -212,6 +212,6 @@ public class AgentWebhookController {
             case "vandalism" -> "파손";
             default -> "이상상황";
         };
-        return cameraAlias + "에서 " + typeKorean + " 감지";
+        return cameraLocation + "에서 " + typeKorean + " 감지";
     }
 }

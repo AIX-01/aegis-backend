@@ -13,7 +13,7 @@ public class CameraDto {
     private String id;
     private String name;
     private Boolean connected;
-    private String alias;
+    private String location;
     private Boolean enabled;
     private Boolean analysisEnabled;
     private String streamUrl;  // WebRTC WHEP URL
@@ -22,7 +22,7 @@ public class CameraDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class UpdateRequest {
-        private String alias;
+        private String location;
         private Boolean enabled;
         private Boolean analysisEnabled;
     }

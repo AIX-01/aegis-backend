@@ -81,7 +81,7 @@ public class MediaMTXSyncService {
                 if (!dbCameraNames.contains(name)) {
                     Camera camera = Camera.builder()
                             .name(name)
-                            .alias(name)
+                            .location(name)
                             .connected(true)
                             .enabled(false)
                             .analysisEnabled(false)
