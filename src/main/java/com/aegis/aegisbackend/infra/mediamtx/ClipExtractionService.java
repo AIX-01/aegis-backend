@@ -1,11 +1,14 @@
 package com.aegis.aegisbackend.infra.mediamtx;
 
+import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -22,8 +25,6 @@ import java.util.regex.Pattern;
 
 /**
  * 클립 추출 서비스
- * - MediaMTX HLS에서 fMP4 세그먼트(.m4s) 다운로드
- * - init.mp4 + 세그먼트 합쳐서 MinIO에 저장
  */
 @Slf4j
 @Service
@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
 public class ClipExtractionService {
 
     private final S3Service s3Service;
+    private final EventRepository eventRepository;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -42,12 +44,28 @@ public class ClipExtractionService {
     @Value("${clip.extraction.segment-count:10}")
     private int defaultSegmentCount;
 
-    // fMP4 세그먼트 패턴 (.mp4, init 제외)
     private static final Pattern SEGMENT_PATTERN = Pattern.compile("^([^#\\s].+_seg\\d+\\.mp4)$", Pattern.MULTILINE);
-    // 초기화 세그먼트 패턴 (#EXT-X-MAP:URI="init.mp4")
     private static final Pattern INIT_SEGMENT_PATTERN = Pattern.compile("#EXT-X-MAP:URI=\"([^\"]+)\"");
-    // 비디오 스트림 플레이리스트 패턴 (video로 시작하는 .m3u8)
     private static final Pattern STREAM_PLAYLIST_PATTERN = Pattern.compile("#EXT-X-STREAM-INF[^\\n]*\\n([^#\\s]+\\.m3u8)", Pattern.MULTILINE);
+
+    /**
+     * 비동기 클립 추출 및 저장
+     */
+    @Async
+    public void extractAndSaveClipAsync(String cameraName, UUID eventId) {
+        try {
+            String clipUrl = extractAndSaveClip(cameraName, eventId);
+
+            Event event = eventRepository.findById(eventId).orElse(null);
+            if (event != null) {
+                event.setClipUrl(clipUrl);
+                eventRepository.save(event);
+                log.info("클립 추출 완료: eventId={}, clipUrl={}", eventId, clipUrl);
+            }
+        } catch (Exception e) {
+            log.warn("클립 추출 실패: eventId={}, error={}", eventId, e.getMessage());
+        }
+    }
 
     public String extractAndSaveClip(String cameraName, UUID eventId) {
         return extractAndSaveClip(cameraName, eventId, defaultSegmentCount);

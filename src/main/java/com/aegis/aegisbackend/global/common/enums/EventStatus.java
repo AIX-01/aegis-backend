@@ -2,7 +2,7 @@ package com.aegis.aegisbackend.global.common.enums;
 
 public enum EventStatus {
     PROCESSING("processing"),
-    RESOLVED("resolved");
+    ANALYZED("analyzed");
 
     private final String value;
 

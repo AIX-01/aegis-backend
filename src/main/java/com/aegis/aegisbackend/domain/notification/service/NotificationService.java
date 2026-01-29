@@ -107,24 +107,45 @@ public class NotificationService {
         log.info("이벤트 관련 알림 삭제 완료: eventId={}", eventId);
     }
 
-    /** 이벤트 발생 시 관련 사용자들에게 알림 생성 */
+    /**
+     * 이벤트 생성 시 알림 (ALERT)
+     */
     @Transactional
-    public void createNotificationsForEvent(Event event) {
+    public void createEventNotifications(Event event) {
         Camera camera = event.getCamera();
-
-        // 해당 카메라에 할당된 사용자들 + Admin 조회
-        List<User> assignedUsers = userRepository.findUsersByCameraId(camera.getId());
-        List<User> admins = userRepository.findByRole(UserRole.ADMIN);
-        assignedUsers.addAll(admins);
-        List<User> uniqueUsers = assignedUsers.stream().distinct().toList();
+        List<User> users = getNotificationTargetUsers(camera.getId());
 
         String title = getEventTitle(event.getType());
-        String message = String.format("[%s] %s", camera.getLocation(), event.getDescription());
+        String message = String.format("[%s] %s 감지", camera.getLocation(), getEventTypeKorean(event.getType()));
 
-        for (User user : uniqueUsers) {
-            createNotification(user.getId(), event.getId(), NotificationType.INFO, title, message);
+        for (User user : users) {
+            createNotification(user.getId(), event.getId(), NotificationType.ALERT, title, message);
         }
-        log.info("이벤트 알림 생성 완료: eventId={}, users={}", event.getId(), uniqueUsers.size());
+        log.info("이벤트 알림 생성 완료: eventId={}, users={}", event.getId(), users.size());
+    }
+
+    /**
+     * 분석 완료 시 알림 (WARNING)
+     */
+    @Transactional
+    public void createAnalysisNotifications(Event event) {
+        Camera camera = event.getCamera();
+        List<User> users = getNotificationTargetUsers(camera.getId());
+
+        String title = "분석 완료";
+        String message = String.format("[%s] 상세 분석이 완료되었습니다.", camera.getLocation());
+
+        for (User user : users) {
+            createNotification(user.getId(), event.getId(), NotificationType.WARNING, title, message);
+        }
+        log.info("분석 완료 알림 생성: eventId={}, users={}", event.getId(), users.size());
+    }
+
+    private List<User> getNotificationTargetUsers(UUID cameraId) {
+        List<User> assignedUsers = userRepository.findUsersByCameraId(cameraId);
+        List<User> admins = userRepository.findByRole(UserRole.ADMIN);
+        assignedUsers.addAll(admins);
+        return assignedUsers.stream().distinct().toList();
     }
 
     private String getEventTitle(EventType type) {
@@ -134,6 +155,16 @@ public class NotificationService {
             case DUMP -> "투기 감지";
             case SWOON -> "실신 감지";
             case VANDALISM -> "파손 감지";
+        };
+    }
+
+    private String getEventTypeKorean(EventType type) {
+        return switch (type) {
+            case ASSAULT -> "폭행";
+            case BURGLARY -> "절도";
+            case DUMP -> "투기";
+            case SWOON -> "실신";
+            case VANDALISM -> "파손";
         };
     }
 
@@ -153,4 +184,3 @@ public class NotificationService {
                 .build();
     }
 }
-
