@@ -41,8 +41,8 @@ erDiagram
     events {
         UUID id PK
         UUID camera_id FK
-        RISK_LEVEL risk_level
-        EVENT_TYPE event_type
+        EVENT_RISK risk
+        EVENT_TYPE type
         TIMESTAMP occurred_at
         EVENT_STATUS status
         TEXT clip_url
@@ -121,8 +121,8 @@ erDiagram
 | ---- | ---- | -------- | ---- | ------ |
 | UUID | id | PK | NO | auto |
 | UUID | camera_id | FK(cameras.id) | NO | - |
-| RISK_LEVEL | risk_level | - | NO | - |
-| EVENT_TYPE | event_type | - | NO | - |
+| EVENT_RISK | risk | - | NO | - |
+| EVENT_TYPE | type | - | NO | - |
 | TIMESTAMP | occurred_at | - | NO | - |
 | EVENT_STATUS | status | - | NO | PROCESSING |
 | TEXT | clip_url | - | YES | - |
@@ -158,7 +158,7 @@ erDiagram
 | ADMIN | "admin" | 관리자 (모든 권한) |
 | USER | "user" | 일반 사용자 (할당 카메라만) |
 
-### RiskLevel
+### EventRisk
 
 | 값 | API 값 | 설명 |
 | -- | ------ | ---- |
@@ -216,8 +216,8 @@ erDiagram
 ### events
 
 - `idx_events_camera_id` (camera_id)
-- `idx_events_risk_level` (risk_level)
-- `idx_events_event_type` (event_type)
+- `idx_events_risk` (risk)
+- `idx_events_type` (type)
 - `idx_events_status` (status)
 - `idx_events_occurred_at` (occurred_at)
 
