@@ -59,20 +59,6 @@ public class AgentWebhookController {
         }
     }
 
-    @GetMapping("/cameras/analysis")
-    public ResponseEntity<?> getAnalysisCameras() {
-        var cameras = cameraRepository.findAll().stream()
-                .filter(c -> Boolean.TRUE.equals(c.getEnabled()) && Boolean.TRUE.equals(c.getAnalysisEnabled()))
-                .map(c -> Map.of(
-                        "id", c.getId().toString(),
-                        "name", c.getName(),
-                        "enabled", c.getEnabled(),
-                        "analysisEnabled", c.getAnalysisEnabled()
-                ))
-                .toList();
-
-        return ResponseEntity.ok(Map.of("cameras", cameras));
-    }
 
     /**
      * 이벤트 생성 (비동기 클립 추출)
