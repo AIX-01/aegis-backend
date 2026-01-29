@@ -64,7 +64,7 @@ public class RedisTokenService {
 
     /**
      * 분석 대상 카메라 목록 저장 및 Pub/Sub 알림 발행
-     * @param cameras [{name: "cam1", alias: "1층 로비"}, ...]
+     * @param cameras [{id: "uuid", name: "cam1", location: "1층 로비"}, ...]
      */
     public void saveAnalysisCamerasAndNotify(List<Map<String, String>> cameras) {
         try {

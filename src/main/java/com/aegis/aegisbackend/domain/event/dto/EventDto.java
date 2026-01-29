@@ -28,7 +28,7 @@ public class EventDto {
         return EventDto.builder()
                 .id(event.getId().toString())
                 .cameraId(event.getCamera().getId().toString())
-                .cameraName(event.getCamera().getAlias())
+                .cameraName(event.getCamera().getLocation())
                 .type(event.getType().getValue())
                 .timestamp(event.getTimestamp().toString())
                 .status(event.getStatus().getValue())

@@ -41,9 +41,9 @@ public class Camera {
     @Builder.Default
     private Boolean connected = false;
 
-    /** 사용자 지정 별칭 */
+    /** 사용자 지정 장소 */
     @Column(nullable = false, length = 100)
-    private String alias;
+    private String location;
 
     /** 카메라 활성화 여부 (메인 스위치) */
     @Column(nullable = false)
@@ -73,8 +73,8 @@ public class Camera {
 
     @PrePersist
     public void prePersist() {
-        if (this.alias == null || this.alias.isEmpty()) {
-            this.alias = this.name;
+        if (this.location == null || this.location.isEmpty()) {
+            this.location = this.name;
         }
     }
 }
