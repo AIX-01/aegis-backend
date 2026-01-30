@@ -15,8 +15,6 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    List<Notification> findByUserIdAndReadOrderByCreatedAtDesc(UUID userId, boolean read);
-
     long countByUserIdAndRead(UUID userId, boolean read);
 
     @Modifying(clearAutomatically = true)
@@ -26,9 +24,5 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Notification n SET n.read = true WHERE n.id = :id")
     int markAsRead(@Param("id") UUID id);
-
-    void deleteByUserId(UUID userId);
-
-    void deleteByEventId(UUID eventId);
 }
 
