@@ -44,7 +44,7 @@ public class CameraService {
     private final SseEmitterService sseEmitterService;
     private final RedisTokenService redisTokenService;
 
-    private static final int DEFAULT_PAGE_SIZE = 9;
+    private static final int DEFAULT_PAGE_SIZE = 6;
 
     @Value("${mediamtx.webrtc-url:/stream}")
     private String webrtcBaseUrl;

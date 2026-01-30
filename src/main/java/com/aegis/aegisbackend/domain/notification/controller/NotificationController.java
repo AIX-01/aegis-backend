@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * 알림 API
- * - 사용자별 알림 조회 및 읽음 처리
+ * - 사용자별 알림 조회 및 삭제
  * - SSE를 통한 실시간 알림 푸시
  */
 @RestController
