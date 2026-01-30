@@ -177,14 +177,6 @@ public class AuthService {
                 : userCameraRepository.findCameraIdsByUserId(user.getId())
                         .stream().map(UUID::toString).toList();
 
-        return UserDto.builder()
-                .id(user.getId().toString())
-                .email(user.getEmail())
-                .name(user.getName())
-                .role(user.getRole().getValue())
-                .assignedCameras(assignedCameras)
-                .createdAt(user.getCreatedAt().toString())
-                .approved(user.getApproved())
-                .build();
+        return UserDto.from(user, assignedCameras);
     }
 }

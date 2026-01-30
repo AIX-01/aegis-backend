@@ -1,6 +1,7 @@
 package com.aegis.aegisbackend.domain.user.repository;
 
 import com.aegis.aegisbackend.domain.user.entity.User;
+import com.aegis.aegisbackend.global.common.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +18,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
+    List<User> findByRole(UserRole role);
 
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera WHERE u.id = :id")
     Optional<User> findByIdWithCameras(@Param("id") UUID id);
