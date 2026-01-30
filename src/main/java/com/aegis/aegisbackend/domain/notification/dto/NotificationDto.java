@@ -15,6 +15,5 @@ public class NotificationDto {
     private String title;
     private String message;
     private String timestamp;
-    private boolean read;
     private String eventId;
 }

@@ -47,28 +47,22 @@ public class NotificationController {
     }
 
     @GetMapping("/unread-count")
-    public ResponseEntity<Map<String, Long>> getUnreadCount(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Long>> getNotificationCount(@AuthenticationPrincipal UserDetails userDetails) {
         UUID userId = UUID.fromString(userDetails.getUsername());
-        long count = notificationService.getUnreadCount(userId);
+        long count = notificationService.getNotificationCount(userId);
         return ResponseEntity.ok(Map.of("count", count));
-    }
-
-    @PatchMapping("/{id}/read")
-    public ResponseEntity<NotificationDto> markAsRead(@PathVariable UUID id) {
-        NotificationDto notification = notificationService.markAsRead(id);
-        return ResponseEntity.ok(notification);
-    }
-
-    @PostMapping("/read-all")
-    public ResponseEntity<Map<String, Boolean>> markAllAsRead(@AuthenticationPrincipal UserDetails userDetails) {
-        UUID userId = UUID.fromString(userDetails.getUsername());
-        notificationService.markAllAsRead(userId);
-        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, Boolean>> deleteNotification(@PathVariable UUID id) {
         notificationService.deleteNotification(id);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Map<String, Boolean>> deleteAllNotifications(@AuthenticationPrincipal UserDetails userDetails) {
+        UUID userId = UUID.fromString(userDetails.getUsername());
+        notificationService.deleteAllNotifications(userId);
         return ResponseEntity.ok(Map.of("success", true));
     }
 }

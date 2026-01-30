@@ -13,7 +13,6 @@ import java.util.UUID;
 @Entity
 @Table(name = "notifications", indexes = {
         @Index(name = "idx_notifications_user_id", columnList = "user_id"),
-        @Index(name = "idx_notifications_user_read", columnList = "user_id, read"),
         @Index(name = "idx_notifications_created_at", columnList = "createdAt")
 })
 @Getter
@@ -45,9 +44,6 @@ public class Notification {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
-    @Column(name = "read", nullable = false)
-    @Builder.Default
-    private Boolean read = false;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

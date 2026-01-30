@@ -2,18 +2,18 @@ package com.aegis.aegisbackend.domain.user.controller;
 
 import com.aegis.aegisbackend.domain.user.dto.UserDto;
 import com.aegis.aegisbackend.domain.user.service.UserService;
+import com.aegis.aegisbackend.global.common.dto.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * 사용자 관리 API (관리자 전용)
- * - 사용자 목록 조회, 승인, 카메라 할당
+ * - 사용자 목록 조회 (페이지네이션), 승인, 카메라 할당
  */
 @RestController
 @RequestMapping("/api/users")
@@ -23,9 +23,14 @@ public class UserController {
 
     private final UserService userService;
 
+    /**
+     * 사용자 목록 조회 (페이지네이션)
+     */
     @GetMapping
-    public ResponseEntity<List<UserDto>> getAllUsers() {
-        List<UserDto> users = userService.getAllUsers();
+    public ResponseEntity<?> getUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        PageResponse<UserDto> users = userService.getUsersPaged(page, size);
         return ResponseEntity.ok(users);
     }
 

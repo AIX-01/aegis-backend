@@ -4,6 +4,7 @@ import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.event.service.EventService;
+import com.aegis.aegisbackend.global.common.dto.PageResponse;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
@@ -23,7 +24,7 @@ import java.util.UUID;
 
 /**
  * 이벤트 API
- * - 이벤트 조회/삭제
+ * - 이벤트 조회/삭제 (페이지네이션 지원)
  * - 클립 다운로드/스트리밍
  */
 @RestController
@@ -35,10 +36,16 @@ public class EventController {
     private final EventRepository eventRepository;
     private final S3Service s3Service;
 
+    /**
+     * 이벤트 목록 조회 (페이지네이션)
+     */
     @GetMapping
-    public ResponseEntity<List<EventDto>> getAllEvents(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<?> getEvents(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         UUID userId = UUID.fromString(userDetails.getUsername());
-        List<EventDto> events = eventService.getAllEvents(userId);
+        PageResponse<EventDto> events = eventService.getEventsPaged(userId, page, size);
         return ResponseEntity.ok(events);
     }
 
