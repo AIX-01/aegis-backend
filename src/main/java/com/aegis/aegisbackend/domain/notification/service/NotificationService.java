@@ -41,10 +41,6 @@ public class NotificationService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public long getNotificationCount(UUID userId) {
-        return notificationRepository.countByUserId(userId);
-    }
 
     @Transactional
     public void createNotification(UUID userId, UUID eventId, NotificationType type, String title, String message) {
@@ -73,18 +69,7 @@ public class NotificationService {
     }
 
     /**
-     * 알림 삭제 (읽음 처리 대신 삭제)
-     */
-    @Transactional
-    public void deleteNotification(UUID notificationId) {
-        if (!notificationRepository.existsById(notificationId)) {
-            throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
-        }
-        notificationRepository.deleteById(notificationId);
-    }
-
-    /**
-     * 모든 알림 삭제 (전체 읽음 대신 전체 삭제)
+     * 모든 알림 삭제
      */
     @Transactional
     public void deleteAllNotifications(UUID userId) {
