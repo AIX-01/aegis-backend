@@ -15,7 +15,6 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     List<Notification> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    long countByUserId(UUID userId);
 
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Notification n WHERE n.user.id = :userId")
