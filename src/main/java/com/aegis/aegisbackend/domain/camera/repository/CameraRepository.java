@@ -1,6 +1,8 @@
 package com.aegis.aegisbackend.domain.camera.repository;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -35,6 +37,13 @@ public interface CameraRepository extends JpaRepository<Camera, UUID> {
 
     @Query("SELECT c FROM Camera c WHERE c.id IN :ids")
     List<Camera> findByIdIn(@Param("ids") List<UUID> ids);
+
+    // 페이지네이션 지원
+    @Query("SELECT c FROM Camera c ORDER BY c.connected DESC, c.enabled DESC, c.location ASC")
+    Page<Camera> findAllPaged(Pageable pageable);
+
+    @Query("SELECT c FROM Camera c WHERE c.id IN :ids ORDER BY c.connected DESC, c.enabled DESC, c.location ASC")
+    Page<Camera> findByIdInPaged(@Param("ids") List<UUID> ids, Pageable pageable);
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Camera c SET c.connected = :connected WHERE c.name NOT IN :names")
