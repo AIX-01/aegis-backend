@@ -43,7 +43,6 @@ public enum ErrorCode {
 
     // Clip Extraction
     CLIP_EXTRACTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "클립 추출에 실패했습니다."),
-    CAMERA_NOT_FOUND_FOR_CLIP(HttpStatus.NOT_FOUND, "클립 추출을 위한 카메라를 찾을 수 없습니다."),
 
     // General
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
