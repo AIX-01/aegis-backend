@@ -2,6 +2,7 @@ package com.aegis.aegisbackend.domain.camera.controller;
 
 import com.aegis.aegisbackend.domain.camera.dto.CameraDto;
 import com.aegis.aegisbackend.domain.camera.service.CameraService;
+import com.aegis.aegisbackend.global.common.dto.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,7 +14,8 @@ import java.util.UUID;
 
 /**
  * 카메라 API
- * - 카메라 목록 조회 (전체)
+ * - 카메라 목록 조회 (페이지네이션)
+ * - 카메라 전체 목록 조회 (멤버 관리용)
  * - 카메라 정보 수정
  */
 @RestController
@@ -24,10 +26,23 @@ public class CameraController {
     private final CameraService cameraService;
 
     /**
-     * 카메라 목록 조회 (전체 - 프론트엔드에서 페이지네이션 처리)
+     * 카메라 목록 조회 (페이지네이션)
+     * 정렬: connected DESC → enabled DESC → location ASC
      */
     @GetMapping
-    public ResponseEntity<List<CameraDto>> getAll(@AuthenticationPrincipal UserDetails user) {
+    public ResponseEntity<PageResponse<CameraDto>> getAll(
+            @AuthenticationPrincipal UserDetails user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "9") int size) {
+        UUID userId = UUID.fromString(user.getUsername());
+        return ResponseEntity.ok(cameraService.getCamerasPaged(userId, page, size));
+    }
+
+    /**
+     * 카메라 전체 목록 조회 (멤버 관리 - 카메라 할당용)
+     */
+    @GetMapping("/all")
+    public ResponseEntity<List<CameraDto>> getAllCameras(@AuthenticationPrincipal UserDetails user) {
         UUID userId = UUID.fromString(user.getUsername());
         return ResponseEntity.ok(cameraService.getAllCameras(userId));
     }
