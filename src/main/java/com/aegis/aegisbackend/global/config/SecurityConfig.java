@@ -41,6 +41,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/signup", "/api/auth/refresh").permitAll()
                         .requestMatchers("/internal/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // OpenAPI 문서 접근 허용
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
