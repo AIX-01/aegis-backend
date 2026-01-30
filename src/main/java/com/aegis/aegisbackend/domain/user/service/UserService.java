@@ -122,26 +122,14 @@ public class UserService {
 
     /** User 엔티티를 UserDto로 변환 */
     public UserDto toUserDto(User user) {
-        List<String> assignedCameras;
+        List<String> assignedCameras = user.getRole() == UserRole.ADMIN
+                ? List.of("all")
+                : userCameraRepository.findCameraIdsByUserId(user.getId())
+                        .stream()
+                        .map(UUID::toString)
+                        .toList();
 
-        if (user.getRole() == UserRole.ADMIN) {
-            assignedCameras = List.of("all");
-        } else {
-            assignedCameras = userCameraRepository.findCameraIdsByUserId(user.getId())
-                    .stream()
-                    .map(UUID::toString)
-                    .toList();
-        }
-
-        return UserDto.builder()
-                .id(user.getId().toString())
-                .email(user.getEmail())
-                .name(user.getName())
-                .role(user.getRole().getValue())
-                .assignedCameras(assignedCameras)
-                .createdAt(user.getCreatedAt().toString())
-                .approved(user.getApproved())
-                .build();
+        return UserDto.from(user, assignedCameras);
     }
 }
 
