@@ -42,8 +42,8 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public long getUnreadCount(UUID userId) {
-        return notificationRepository.countByUserIdAndRead(userId, false);
+    public long getNotificationCount(UUID userId) {
+        return notificationRepository.countByUserId(userId);
     }
 
     @Transactional
@@ -62,7 +62,6 @@ public class NotificationService {
                 .type(type)
                 .title(title)
                 .message(message)
-                .read(false)
                 .build();
 
         Notification saved = notificationRepository.save(notification);
@@ -73,29 +72,24 @@ public class NotificationService {
         sseEmitterService.sendNotification(userId, dto);
     }
 
-    @Transactional
-    public NotificationDto markAsRead(UUID notificationId) {
-        Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
-
-        notification.setRead(true);
-        notificationRepository.save(notification);
-
-        return toNotificationDto(notification);
-    }
-
-    @Transactional
-    public void markAllAsRead(UUID userId) {
-        int updated = notificationRepository.markAllAsReadByUserId(userId);
-        log.info("Marked {} notifications as read for user: {}", updated, userId);
-    }
-
+    /**
+     * 알림 삭제 (읽음 처리 대신 삭제)
+     */
     @Transactional
     public void deleteNotification(UUID notificationId) {
         if (!notificationRepository.existsById(notificationId)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND);
         }
         notificationRepository.deleteById(notificationId);
+    }
+
+    /**
+     * 모든 알림 삭제 (전체 읽음 대신 전체 삭제)
+     */
+    @Transactional
+    public void deleteAllNotifications(UUID userId) {
+        notificationRepository.deleteAllByUserId(userId);
+        log.info("모든 알림 삭제 완료: userId={}", userId);
     }
 
     /**
@@ -179,7 +173,6 @@ public class NotificationService {
                 .title(notification.getTitle())
                 .message(notification.getMessage())
                 .timestamp(timestamp.toString())
-                .read(notification.getRead())
                 .eventId(notification.getEvent() != null ? notification.getEvent().getId().toString() : null)
                 .build();
     }

@@ -5,6 +5,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.camera.entity.UserCamera;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
+import com.aegis.aegisbackend.global.common.dto.PageResponse;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
@@ -13,6 +14,9 @@ import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
 import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,11 +33,23 @@ public class UserService {
     private final CameraRepository cameraRepository;
     private final SseEmitterService sseEmitterService;
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
         return userRepository.findAllWithCameras().stream()
                 .map(this::toUserDto)
                 .toList();
+    }
+
+    /**
+     * 사용자 목록 조회 (페이지네이션)
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<UserDto> getUsersPaged(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
+        Page<User> userPage = userRepository.findAllWithCamerasPaged(pageable);
+        return PageResponse.from(userPage, this::toUserDto);
     }
 
     @Transactional(readOnly = true)

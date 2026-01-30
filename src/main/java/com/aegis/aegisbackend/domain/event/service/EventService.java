@@ -5,6 +5,7 @@ import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
+import com.aegis.aegisbackend.global.common.dto.PageResponse;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
@@ -14,6 +15,9 @@ import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +36,8 @@ public class EventService {
     private final SseEmitterService sseEmitterService;
     private final S3Service s3Service;
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
     @Transactional(readOnly = true)
     public List<EventDto> getAllEvents(UUID userId) {
         User user = userRepository.findById(userId)
@@ -49,6 +55,27 @@ public class EventService {
         return events.stream()
                 .map(EventDto::from)
                 .toList();
+    }
+
+    /**
+     * 이벤트 목록 조회 (페이지네이션)
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<EventDto> getEventsPaged(UUID userId, int page, int size) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
+        Page<Event> eventPage;
+
+        if (user.getRole() == UserRole.ADMIN) {
+            eventPage = eventRepository.findAllWithCameraPaged(pageable);
+        } else {
+            List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
+            eventPage = eventRepository.findByCameraIdInWithCameraPaged(assignedCameraIds, pageable);
+        }
+
+        return PageResponse.from(eventPage, EventDto::from);
     }
 
     @Transactional(readOnly = true)

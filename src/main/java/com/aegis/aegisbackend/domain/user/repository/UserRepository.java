@@ -2,6 +2,8 @@ package com.aegis.aegisbackend.domain.user.repository;
 
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -31,5 +33,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera")
     List<User> findAllWithCameras();
+
+    // 페이지네이션 지원
+    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera",
+           countQuery = "SELECT COUNT(u) FROM User u")
+    Page<User> findAllWithCamerasPaged(Pageable pageable);
 }
 
