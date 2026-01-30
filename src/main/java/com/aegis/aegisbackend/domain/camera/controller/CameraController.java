@@ -33,7 +33,7 @@ public class CameraController {
     public ResponseEntity<PageResponse<CameraDto>> getAll(
             @AuthenticationPrincipal UserDetails user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "9") int size) {
+            @RequestParam(defaultValue = "6") int size) {
         UUID userId = UUID.fromString(user.getUsername());
         return ResponseEntity.ok(cameraService.getCamerasPaged(userId, page, size));
     }
