@@ -33,12 +33,15 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     @Query("SELECT e.type, COUNT(e) FROM Event e GROUP BY e.type")
     List<Object[]> countByEventType();
 
-    @Query("SELECT FUNCTION('DATE', e.occurredAt) as date, COUNT(e) FROM Event e WHERE e.occurredAt >= :startDate GROUP BY FUNCTION('DATE', e.occurredAt)")
+    // PostgreSQL: DATE(occurred_at)로 날짜별 집계
+    @Query(value = "SELECT DATE(occurred_at) as date, COUNT(*) FROM events WHERE occurred_at >= :startDate GROUP BY DATE(occurred_at)", nativeQuery = true)
     List<Object[]> countByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    @Query("SELECT FUNCTION('DATE', e.occurredAt) as date, COUNT(e) FROM Event e WHERE e.occurredAt >= :startDate AND (e.type = 'ASSAULT' OR e.type = 'BURGLARY') GROUP BY FUNCTION('DATE', e.occurredAt)")
+    // PostgreSQL: 날짜별 심각 이벤트(ASSAULT, BURGLARY) 집계
+    @Query(value = "SELECT DATE(occurred_at) as date, COUNT(*) FROM events WHERE occurred_at >= :startDate AND type IN ('ASSAULT', 'BURGLARY') GROUP BY DATE(occurred_at)", nativeQuery = true)
     List<Object[]> countAlertsByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    @Query("SELECT FUNCTION('DAYOFWEEK', e.occurredAt) as dayOfWeek, COUNT(e), SUM(CASE WHEN e.status = 'ANALYZED' THEN 1 ELSE 0 END) FROM Event e WHERE e.occurredAt >= :startDate GROUP BY FUNCTION('DAYOFWEEK', e.occurredAt)")
+    // PostgreSQL: EXTRACT(DOW FROM ...)로 요일별 집계 (0=일요일, 6=토요일)
+    @Query(value = "SELECT EXTRACT(DOW FROM occurred_at) as day_of_week, COUNT(*), SUM(CASE WHEN status = 'ANALYZED' THEN 1 ELSE 0 END) FROM events WHERE occurred_at >= :startDate GROUP BY EXTRACT(DOW FROM occurred_at)", nativeQuery = true)
     List<Object[]> countByDayOfWeekSince(@Param("startDate") LocalDateTime startDate);
 }
