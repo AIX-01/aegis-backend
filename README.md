@@ -334,9 +334,19 @@ src/main/java/com/aegis/aegisbackend/
 | DUPLICATE_EMAIL | 400 | 이미 등록된 이메일입니다. |
 | REFRESH_TOKEN_NOT_FOUND | 401 | Refresh token이 없습니다. |
 | INVALID_REFRESH_TOKEN | 401 | 유효하지 않은 refresh token입니다. |
+| INVALID_USER | 401 | 유효하지 않은 사용자입니다. |
+| AUTHENTICATION_REQUIRED | 401 | 인증이 필요합니다. |
+| USER_NOT_FOUND | 401 | 사용자를 찾을 수 없습니다. |
 | CURRENT_PASSWORD_MISMATCH | 400 | 현재 비밀번호가 일치하지 않습니다. |
 | PASSWORD_TOO_SHORT | 400 | 새 비밀번호는 6자 이상이어야 합니다. |
 | USER_DELETED | 403 | 탈퇴한 계정입니다. |
+
+### User
+
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| USER_ID_REQUIRED | 400 | 사용자 ID가 필요합니다. |
+| USER_NOT_FOUND_BY_ID | 404 | 사용자를 찾을 수 없습니다. |
 
 ### Camera
 
@@ -352,13 +362,21 @@ src/main/java/com/aegis/aegisbackend/
 |------|------|--------|
 | EVENT_NOT_FOUND | 404 | 이벤트를 찾을 수 없습니다. |
 
-### S3
+### S3/Clip
 
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | S3_UPLOAD_FAILED | 500 | S3 업로드에 실패했습니다. |
 | S3_DOWNLOAD_FAILED | 500 | S3 다운로드에 실패했습니다. |
 | S3_DELETE_FAILED | 500 | S3 삭제에 실패했습니다. |
+| CLIP_EXTRACTION_FAILED | 500 | 클립 추출에 실패했습니다. |
+
+### General
+
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| FORBIDDEN | 403 | 권한이 없습니다. |
+| INTERNAL_SERVER_ERROR | 500 | 서버 내부 오류가 발생했습니다. |
 
 ## 외부 연동
 
