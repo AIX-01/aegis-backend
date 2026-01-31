@@ -688,3 +688,24 @@ java -jar build/libs/aegis-backend-1.0.0.jar
 Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 - 내부 포트: 8080
 - 외부 접근: `https://localhost/api/*`
+
+---
+
+## 🔧 알려진 이슈
+
+### 고아 코드
+
+#### EventService.getAllEvents() 미사용
+**파일**: `EventService.java`
+
+`getAllEvents()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getEventsPaged()`만 사용 중.
+
+**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+
+#### UserService.getAllUsers() 미사용
+**파일**: `UserService.java`
+
+`getAllUsers()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getUsersPaged()`만 사용 중.
+
+**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+
