@@ -158,6 +158,65 @@ src/main/java/com/aegis/aegisbackend/
 | PATCH | `/password` | 비밀번호 변경 |
 | DELETE | `/me` | 회원 탈퇴 |
 
+#### POST /api/auth/signup
+
+**Request:**
+```json
+{
+  "email": "string (필수, 이메일 형식)",
+  "password": "string (필수, 6자 이상)",
+  "name": "string (필수, 100자 이하)"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "message": "회원가입이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다."
+}
+```
+
+#### POST /api/auth/login
+
+**Request:**
+```json
+{
+  "email": "string (필수)",
+  "password": "string (필수)"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "accessToken": "JWT 토큰",
+  "user": { "id", "email", "name", "role", "assignedCameras", "createdAt", "approved" }
+}
+```
+**Cookie:** `refreshToken` (HttpOnly, Secure, 7일)
+
+#### POST /api/auth/refresh
+
+**Cookie:** `refreshToken` 필요
+
+**Response:** `200 OK`
+```json
+{
+  "accessToken": "새 JWT 토큰"
+}
+```
+
+#### PATCH /api/auth/password
+
+**Request:**
+```json
+{
+  "currentPassword": "string (필수)",
+  "newPassword": "string (필수, 6자 이상)"
+}
+```
+
 ### Camera API (`/api/cameras`)
 
 | Method | Path | 설명 |
@@ -169,6 +228,37 @@ src/main/java/com/aegis/aegisbackend/
 
 **정렬 순서**: `connected DESC` → `enabled DESC` → `location ASC`
 
+#### GET /api/cameras
+
+**Response:** `200 OK` (PageResponse)
+```json
+{
+  "content": [
+    {
+      "id": "UUID",
+      "name": "카메라명 (MediaMTX 원본)",
+      "location": "장소",
+      "connected": true,
+      "enabled": true,
+      "analysisEnabled": true,
+      "streamUrl": "/stream/{name}/whep"
+    }
+  ],
+  "page": 0, "size": 6, "totalElements": 10, "totalPages": 2, "first": true, "last": false
+}
+```
+
+#### PATCH /api/cameras/{id}
+
+**Request:**
+```json
+{
+  "location": "string (선택)",
+  "enabled": "boolean (선택)",
+  "analysisEnabled": "boolean (선택)"
+}
+```
+
 ### Event API (`/api/events`)
 
 | Method | Path | 설명 |
@@ -178,6 +268,32 @@ src/main/java/com/aegis/aegisbackend/
 | DELETE | `/{id}` | 이벤트 삭제 (Admin) |
 | GET | `/{id}/clip` | 클립 다운로드 |
 | GET | `/{id}/clip/stream` | 클립 스트리밍 |
+
+#### GET /api/events
+
+**Response:** `200 OK` (PageResponse)
+```json
+{
+  "content": [
+    {
+      "id": "UUID",
+      "cameraId": "UUID",
+      "cameraName": "장소명",
+      "risk": "normal | suspicious | abnormal",
+      "type": "assault | burglary | dump | swoon | vandalism",
+      "occurredAt": "2026-01-31T12:00:00",
+      "status": "processing | analyzed",
+      "clipUrl": "S3 URL (nullable)",
+      "summary": "AI 요약 (nullable)",
+      "riskScore": "위험 점수 (nullable)",
+      "actions": "[{...}] (nullable)",
+      "ragReferences": "[{...}] (nullable)",
+      "report": "상세 보고서 (nullable)"
+    }
+  ],
+  "page": 0, "size": 20, "totalElements": 100, "totalPages": 5, "first": true, "last": false
+}
+```
 
 ### Notification API (`/api/notifications`)
 
@@ -205,6 +321,17 @@ src/main/java/com/aegis/aegisbackend/
 | DELETE | `/{id}` | 사용자 삭제 |
 | PATCH | `/{id}/approve` | 사용자 승인 |
 
+#### PATCH /api/users/{id}
+
+**Request:**
+```json
+{
+  "name": "string (선택)",
+  "role": "user | admin (선택)",
+  "assignedCameras": ["카메라 UUID 배열"] 또는 ["all"] (선택)
+}
+```
+
 ### Internal API (내부망 전용)
 
 #### Agent Webhook (`/internal/agent`)
@@ -215,6 +342,38 @@ src/main/java/com/aegis/aegisbackend/
 | PATCH | `/events/{id}/analysis` | 분석 결과 추가 |
 | GET | `/test/clip/{cameraName}` | 클립 추출 테스트 |
 
+##### POST /internal/agent/events
+
+**Request:**
+```json
+{
+  "cameraId": "UUID (필수)",
+  "risk": "normal | suspicious | abnormal (필수)",
+  "type": "assault | burglary | dump | swoon | vandalism (필수)",
+  "occurredAt": "ISO8601 (선택, 기본 now)"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "eventId": "UUID"
+}
+```
+
+##### PATCH /internal/agent/events/{id}/analysis
+
+**Request:**
+```json
+{
+  "summary": "string",
+  "riskScore": "string",
+  "actions": [{...}],
+  "ragReferences": [{...}],
+  "report": "string"
+}
+```
+
 #### MediaMTX Webhook (`/internal/mediamtx`)
 
 | Method | Path | 설명 |
@@ -222,69 +381,182 @@ src/main/java/com/aegis/aegisbackend/
 | POST | `/sync` | 카메라 동기화 트리거 |
 | POST | `/auth` | 스트림 인증 (MediaMTX 호출) |
 
+##### POST /internal/mediamtx/auth
+
+MediaMTX에서 호출하는 인증 요청:
+
+**Request:**
+```json
+{
+  "user": "사용자명",
+  "password": "비밀번호 또는 JWT",
+  "action": "publish | read",
+  "path": "카메라 경로",
+  "protocol": "srt | rtsp | hls | webrtc",
+  "ip": "클라이언트 IP"
+}
+```
+
+**인증 규칙:**
+- `SRT publish`: ID/PW 검증
+- `WebRTC read`: JWT 검증 + 카메라 권한 확인
+- `RTSP/HLS read`: 인증 없음 (내부망)
+
 ## 데이터 모델
 
-### User
+### ERD
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | UUID | PK |
-| email | String | 이메일 (unique) |
-| password | String | 암호화된 비밀번호 |
-| name | String | 이름 |
-| role | UserRole | USER, ADMIN |
-| approved | Boolean | 승인 여부 |
-| deleted | Boolean | 탈퇴 여부 |
-| createdAt | LocalDateTime | 가입일 |
+```mermaid
+erDiagram
+    users ||--o{ user_cameras : has
+    users ||--o{ notifications : receives
+    cameras ||--o{ user_cameras : assigned_to
+    cameras ||--o{ events : generates
+    events ||--o{ notifications : triggers
 
-### Camera
+    users {
+        UUID id PK
+        VARCHAR email UK
+        VARCHAR password
+        VARCHAR name
+        ENUM role
+        BOOLEAN approved
+        BOOLEAN deleted
+        TIMESTAMP deleted_at
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | UUID | PK |
-| name | String | 미디어서버 원본 이름 |
-| location | String | 장소 |
-| connected | Boolean | 연결 상태 |
-| enabled | Boolean | 활성화 여부 |
-| analysisEnabled | Boolean | AI 분석 활성화 |
-| createdAt | LocalDateTime | 생성일 |
+    cameras {
+        UUID id PK
+        VARCHAR name
+        VARCHAR location
+        BOOLEAN connected
+        BOOLEAN enabled
+        BOOLEAN analysis_enabled
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
 
-### UserCamera (다대다 관계)
+    user_cameras {
+        UUID id PK
+        UUID user_id FK
+        UUID camera_id FK
+    }
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | Long | PK |
-| user | User | FK |
-| camera | Camera | FK |
+    events {
+        UUID id PK
+        UUID camera_id FK
+        ENUM risk
+        ENUM type
+        ENUM status
+        TIMESTAMP occurred_at
+        TEXT clip_url
+        TEXT summary
+        VARCHAR risk_score
+        JSONB actions
+        JSONB rag_references
+        TEXT report
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
 
-### Event
+    notifications {
+        UUID id PK
+        UUID user_id FK
+        UUID event_id FK
+        ENUM type
+        VARCHAR title
+        TEXT message
+        TIMESTAMP created_at
+    }
+```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | UUID | PK |
-| camera | Camera | FK |
-| type | EventType | 이벤트 유형 |
-| risk | EventRisk | 위험 수준 |
-| status | EventStatus | 처리 상태 |
-| occurredAt | LocalDateTime | 발생 시각 |
-| clipUrl | String | S3 클립 URL |
-| summary | String | AI 요약 |
-| report | String | 상세 보고서 |
-| riskScore | String | 위험 점수 |
-| actions | JSON | 권장 조치 |
-| ragReferences | JSON | RAG 참조 |
+### 테이블 상세
 
-### Notification
+#### users
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | UUID | PK |
-| user | User | FK |
-| event | Event | FK (nullable) |
-| type | NotificationType | 알림 유형 |
-| title | String | 제목 |
-| message | String | 메시지 |
-| createdAt | LocalDateTime | 생성일 |
+| 컬럼 | 타입 | 제약조건 | 기본값 | 설명 |
+|------|------|----------|--------|------|
+| id | UUID | PK | auto | 고유 식별자 |
+| email | VARCHAR(255) | UNIQUE, NOT NULL | - | 로그인 이메일 |
+| password | VARCHAR(255) | NOT NULL | - | BCrypt 암호화 |
+| name | VARCHAR(100) | NOT NULL | - | 사용자 이름 |
+| role | ENUM | NOT NULL | USER | USER, ADMIN |
+| approved | BOOLEAN | NOT NULL | false | 관리자 승인 여부 |
+| deleted | BOOLEAN | NOT NULL | false | 탈퇴 여부 |
+| deleted_at | TIMESTAMP | - | NULL | 탈퇴 일시 |
+| created_at | TIMESTAMP | NOT NULL | auto | 가입일 |
+| updated_at | TIMESTAMP | NOT NULL | auto | 수정일 |
+
+#### cameras
+
+| 컬럼 | 타입 | 제약조건 | 기본값 | 설명 |
+|------|------|----------|--------|------|
+| id | UUID | PK | auto | 고유 식별자 |
+| name | VARCHAR(50) | NOT NULL | - | MediaMTX 스트림 경로명 |
+| location | VARCHAR(100) | NOT NULL | =name | 사용자 지정 장소 |
+| connected | BOOLEAN | NOT NULL | false | MediaMTX 연결 상태 |
+| enabled | BOOLEAN | NOT NULL | false | 카메라 활성화 |
+| analysis_enabled | BOOLEAN | NOT NULL | false | AI 분석 활성화 |
+| created_at | TIMESTAMP | NOT NULL | auto | 생성일 |
+| updated_at | TIMESTAMP | NOT NULL | auto | 수정일 |
+
+#### user_cameras
+
+| 컬럼 | 타입 | 제약조건 | 설명 |
+|------|------|----------|------|
+| id | UUID | PK | 고유 식별자 |
+| user_id | UUID | FK → users.id | 사용자 |
+| camera_id | UUID | FK → cameras.id | 카메라 |
+
+#### events
+
+| 컬럼 | 타입 | 제약조건 | 기본값 | 설명 |
+|------|------|----------|--------|------|
+| id | UUID | PK | auto | 고유 식별자 |
+| camera_id | UUID | FK → cameras.id | - | 카메라 |
+| risk | ENUM | NOT NULL | - | NORMAL, SUSPICIOUS, ABNORMAL |
+| type | ENUM | NOT NULL | - | ASSAULT, BURGLARY, DUMP, SWOON, VANDALISM |
+| status | ENUM | NOT NULL | PROCESSING | PROCESSING, ANALYZED |
+| occurred_at | TIMESTAMP | NOT NULL | - | 발생 시각 |
+| clip_url | TEXT | - | NULL | S3 클립 URL |
+| summary | TEXT | - | NULL | AI 요약 |
+| risk_score | VARCHAR(10) | - | NULL | 위험 점수 |
+| actions | JSONB | - | NULL | 권장 조치 |
+| rag_references | JSONB | - | NULL | RAG 참조 |
+| report | TEXT | - | NULL | 상세 보고서 |
+| created_at | TIMESTAMP | NOT NULL | auto | 생성일 |
+| updated_at | TIMESTAMP | NOT NULL | auto | 수정일 |
+
+#### notifications
+
+| 컬럼 | 타입 | 제약조건 | 설명 |
+|------|------|----------|------|
+| id | UUID | PK | 고유 식별자 |
+| user_id | UUID | FK → users.id, NOT NULL | 수신 사용자 |
+| event_id | UUID | FK → events.id | 관련 이벤트 (nullable) |
+| type | ENUM | NOT NULL | ALERT, WARNING, INFO, SUCCESS |
+| title | VARCHAR(200) | NOT NULL | 제목 |
+| message | TEXT | NOT NULL | 메시지 |
+| created_at | TIMESTAMP | NOT NULL | 생성일 |
+
+### 인덱스
+
+| 테이블 | 인덱스명 | 컬럼 |
+|--------|----------|------|
+| users | idx_users_email | email |
+| users | idx_users_approved | approved |
+| cameras | idx_cameras_connected | connected |
+| cameras | idx_cameras_enabled | enabled |
+| cameras | idx_cameras_analysis_enabled | analysis_enabled |
+| events | idx_events_camera_id | camera_id |
+| events | idx_events_risk | risk |
+| events | idx_events_type | type |
+| events | idx_events_status | status |
+| events | idx_events_occurred_at | occurred_at |
+| notifications | idx_notifications_user_id | user_id |
+| notifications | idx_notifications_created_at | created_at |
 
 ## 인증/인가
 
