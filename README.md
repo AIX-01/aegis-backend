@@ -665,7 +665,7 @@ erDiagram
 
 - 클립 저장/조회/삭제
 - 버킷: `files` (기본값, 환경변수 `AWS_S3_BUCKET`으로 변경 가능)
-- 키 형식: `clips/{eventId}.ts`
+- 키 형식: `events/{eventId}/clip.mp4`
 
 ### Redis
 
