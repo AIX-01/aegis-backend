@@ -122,26 +122,28 @@ src/main/java/com/aegis/aegisbackend/
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
 | `DB_URL` | PostgreSQL URL | `jdbc:postgresql://localhost:5432/aegis` |
-| `DB_USERNAME` | DB 사용자 | - |
-| `DB_PASSWORD` | DB 비밀번호 | - |
+| `DB_USERNAME` | DB 사용자 | `aegis` |
+| `DB_PASSWORD` | DB 비밀번호 | `trillion` |
 | `REDIS_HOST` | Redis 호스트 | `localhost` |
 | `REDIS_PORT` | Redis 포트 | `6379` |
-| `REDIS_PASSWORD` | Redis 비밀번호 | - |
-| `AWS_S3_ACCESS_KEY` | S3 Access Key | - |
-| `AWS_S3_SECRET_KEY` | S3 Secret Key | - |
-| `AWS_S3_REGION` | S3 리전 | `ap-northeast-2` |
-| `AWS_S3_BUCKET` | S3 버킷 | `aegis-clips` |
-| `AWS_S3_ENDPOINT` | S3 엔드포인트 (MinIO용) | - |
-| `JWT_SECRET` | JWT 서명 키 (256bit 이상) | - |
+| `REDIS_PASSWORD` | Redis 비밀번호 | (빈 문자열) |
+| `AWS_S3_ACCESS_KEY` | S3 Access Key | `aegis` |
+| `AWS_S3_SECRET_KEY` | S3 Secret Key | `trillion` |
+| `AWS_S3_REGION` | S3 리전 | `us-east-1` |
+| `AWS_S3_BUCKET` | S3 버킷 | `files` |
+| `AWS_S3_ENDPOINT` | S3 엔드포인트 (MinIO용) | `http://localhost:9000` |
+| `JWT_SECRET` | JWT 서명 키 (256bit 이상) | (개발용 기본값) |
 | `JWT_ACCESS_EXPIRATION` | Access Token 만료 (ms) | `900000` (15분) |
 | `JWT_REFRESH_EXPIRATION` | Refresh Token 만료 (ms) | `604800000` (7일) |
-| `CORS_ALLOWED_ORIGINS` | CORS 허용 Origin | - |
 | `MEDIAMTX_API_URL` | MediaMTX API URL | `http://localhost:9997` |
-| `MEDIAMTX_SRT_USER` | SRT 인증 사용자 | - |
-| `MEDIAMTX_SRT_PASSWORD` | SRT 인증 비밀번호 | - |
-| `ADMIN_EMAIL` | 초기 Admin 이메일 | - |
-| `ADMIN_PASSWORD` | 초기 Admin 비밀번호 | - |
-| `ADMIN_NAME` | 초기 Admin 이름 | - |
+| `MEDIAMTX_WEBRTC_URL` | WebRTC WHEP 기본 경로 | `/stream` |
+| `MEDIAMTX_HLS_URL` | HLS 클립 추출 URL | `http://localhost:8888` |
+| `MEDIAMTX_SRT_USER` | SRT 인증 사용자 | `aegis` |
+| `MEDIAMTX_SRT_PASSWORD` | SRT 인증 비밀번호 | `trillion` |
+| `CLIP_SEGMENT_COUNT` | 클립 추출 세그먼트 수 | `10` |
+| `ADMIN_EMAIL` | 초기 Admin 이메일 | `admin@aegis.local` |
+| `ADMIN_PASSWORD` | 초기 Admin 비밀번호 | `changeyourpassword` |
+| `ADMIN_NAME` | 초기 Admin 이름 | `Admin` |
 
 ## API 명세
 
