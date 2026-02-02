@@ -12,7 +12,13 @@ import java.util.Map;
 public class AnalysisResultRequest {
     private String summary;
     private String riskScore;
-    private List<Map<String, Object>> actions;
+    private List<ActionRequest> actions;
     private List<Map<String, Object>> ragReferences;
     private String report;
+
+    @Data
+    public static class ActionRequest {
+        private String log;
+        private String triggeredAt;  // ISO8601
+    }
 }

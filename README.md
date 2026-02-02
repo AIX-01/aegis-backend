@@ -342,7 +342,6 @@ src/main/java/com/aegis/aegisbackend/
 |--------|------|------|
 | POST | `/events` | 이벤트 생성 |
 | PATCH | `/events/{id}/analysis` | 분석 결과 추가 |
-| GET | `/test/clip/{cameraName}` | 클립 추출 테스트 |
 
 ##### POST /internal/agent/events
 
@@ -370,7 +369,12 @@ src/main/java/com/aegis/aegisbackend/
 {
   "summary": "string",
   "riskScore": "string",
-  "actions": [{...}],
+  "actions": [
+    {
+      "log": "액션 로그 텍스트",
+      "triggeredAt": "ISO8601"
+    }
+  ],
   "ragReferences": [{...}],
   "report": "string"
 }
@@ -414,6 +418,7 @@ erDiagram
     users ||--o{ notifications : receives
     cameras ||--o{ user_cameras : assigned_to
     cameras ||--o{ events : generates
+    events ||--o{ event_actions : has
     events ||--o{ notifications : triggers
 
     users {
@@ -456,11 +461,18 @@ erDiagram
         TEXT clip_url
         TEXT summary
         VARCHAR risk_score
-        JSONB actions
         JSONB rag_references
         TEXT report
         TIMESTAMP created_at
         TIMESTAMP updated_at
+    }
+
+    event_actions {
+        UUID id PK
+        UUID event_id FK
+        TEXT log
+        TIMESTAMP triggered_at
+        TIMESTAMP created_at
     }
 
     notifications {
@@ -525,11 +537,20 @@ erDiagram
 | clip_url | TEXT | - | NULL | S3 클립 URL |
 | summary | TEXT | - | NULL | AI 요약 |
 | risk_score | VARCHAR(10) | - | NULL | 위험 점수 |
-| actions | JSONB | - | NULL | 권장 조치 |
 | rag_references | JSONB | - | NULL | RAG 참조 |
 | report | TEXT | - | NULL | 상세 보고서 |
 | created_at | TIMESTAMP | NOT NULL | auto | 생성일 |
 | updated_at | TIMESTAMP | NOT NULL | auto | 수정일 |
+
+#### event_actions
+
+| 컬럼 | 타입 | 제약조건 | 기본값 | 설명 |
+|------|------|----------|--------|------|
+| id | UUID | PK | auto | 고유 식별자 |
+| event_id | UUID | FK → events.id, NOT NULL | - | 이벤트 |
+| log | TEXT | NOT NULL | - | 액션 로그 |
+| triggered_at | TIMESTAMP | NOT NULL | - | 발동 시각 |
+| created_at | TIMESTAMP | NOT NULL | auto | 생성일 |
 
 #### notifications
 
@@ -557,6 +578,7 @@ erDiagram
 | events | idx_events_type | type |
 | events | idx_events_status | status |
 | events | idx_events_occurred_at | occurred_at |
+| event_actions | idx_event_actions_event_id | event_id |
 | notifications | idx_notifications_user_id | user_id |
 | notifications | idx_notifications_created_at | created_at |
 

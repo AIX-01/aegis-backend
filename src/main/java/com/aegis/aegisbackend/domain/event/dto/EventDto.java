@@ -1,6 +1,7 @@
 package com.aegis.aegisbackend.domain.event.dto;
 
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.entity.EventAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,7 +25,7 @@ public class EventDto {
     private String clipUrl;
     private String summary;
     private String riskScore;
-    private List<Map<String, Object>> actions;
+    private List<ActionDto> actions;
     private List<Map<String, Object>> ragReferences;
     private String report;
 
@@ -40,9 +41,29 @@ public class EventDto {
                 .clipUrl(event.getClipUrl())
                 .summary(event.getSummary())
                 .riskScore(event.getRiskScore())
-                .actions(event.getActions())
+                .actions(event.getActions() != null
+                        ? event.getActions().stream().map(ActionDto::from).toList()
+                        : null)
                 .ragReferences(event.getRagReferences())
                 .report(event.getReport())
                 .build();
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActionDto {
+        private String id;
+        private String log;
+        private String triggeredAt;
+
+        public static ActionDto from(EventAction action) {
+            return ActionDto.builder()
+                    .id(action.getId().toString())
+                    .log(action.getLog())
+                    .triggeredAt(action.getTriggeredAt().toString())
+                    .build();
+        }
     }
 }
