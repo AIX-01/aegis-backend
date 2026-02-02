@@ -18,7 +18,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -53,6 +52,23 @@ public class EventController {
     public ResponseEntity<EventDto> getEventById(@PathVariable UUID id) {
         EventDto event = eventService.getEventById(id);
         return ResponseEntity.ok(event);
+    }
+
+    /**
+     * 이벤트 보고서 HTML 조회
+     */
+    @GetMapping(value = "/{id}/report", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> getEventReport(@PathVariable UUID id) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        if (event.getReport() == null || event.getReport().isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(event.getReport());
     }
 
     @DeleteMapping("/{id}")

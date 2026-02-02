@@ -267,6 +267,7 @@ src/main/java/com/aegis/aegisbackend/
 |--------|------|------|
 | GET | `/` | 이벤트 목록 (페이지네이션, 기본 size=20) |
 | GET | `/{id}` | 이벤트 상세 |
+| GET | `/{id}/report` | 보고서 HTML 조회 |
 | DELETE | `/{id}` | 이벤트 삭제 (Admin) |
 | GET | `/{id}/clip` | 클립 다운로드 |
 | GET | `/{id}/clip/stream` | 클립 스트리밍 |
@@ -295,6 +296,22 @@ src/main/java/com/aegis/aegisbackend/
   ],
   "page": 0, "size": 20, "totalElements": 100, "totalPages": 5, "first": true, "last": false
 }
+```
+
+#### GET /api/events/{id}/report
+
+**Response:** `200 OK` (Content-Type: text/html)
+```html
+<!DOCTYPE html>
+<html>
+<head>...</head>
+<body>
+  <!-- AI Agent가 생성한 분석 보고서 HTML -->
+</body>
+</html>
+```
+
+**Error:** `404 Not Found` (보고서가 없는 경우)
 ```
 
 ### Notification API (`/api/notifications`)
@@ -367,16 +384,17 @@ src/main/java/com/aegis/aegisbackend/
 **Request:**
 ```json
 {
-  "summary": "string",
-  "riskScore": "string",
-  "actions": [
-    {
-      "log": "액션 로그 텍스트",
-      "triggeredAt": "ISO8601"
-    }
-  ],
-  "ragReferences": [{...}],
-  "report": "string"
+  "risk": "normal | suspicious | abnormal (선택)",
+  "type": "assault | burglary | dump | swoon | vandalism (선택)",
+  "summary": "string (선택)",
+  "riskScore": "string (선택)"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "eventId": "UUID"
 }
 ```
 
