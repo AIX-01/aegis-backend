@@ -4,7 +4,6 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
-import com.aegis.aegisbackend.domain.event.entity.EventAction;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
@@ -105,23 +104,21 @@ public class AgentWebhookController {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            event.setSummary(request.getSummary());
-            event.setRiskScore(request.getRiskScore());
-            event.setRagReferences(request.getRagReferences());
-            event.setReport(request.getReport());
+            // 4개 필드만 업데이트
+            if (request.getRisk() != null) {
+                event.setRisk(EventRisk.fromValue(request.getRisk()));
+            }
+            if (request.getType() != null) {
+                event.setType(EventType.fromValue(request.getType()));
+            }
+            if (request.getSummary() != null) {
+                event.setSummary(request.getSummary());
+            }
+            if (request.getRiskScore() != null) {
+                event.setRiskScore(request.getRiskScore());
+            }
             event.setStatus(EventStatus.ANALYZED);
 
-            // 액션 로그 처리 (1:N 관계)
-            if (request.getActions() != null) {
-                event.getActions().clear();
-                for (AnalysisResultRequest.ActionRequest actionReq : request.getActions()) {
-                    EventAction action = EventAction.builder()
-                            .log(actionReq.getLog())
-                            .triggeredAt(LocalDateTime.parse(actionReq.getTriggeredAt()))
-                            .build();
-                    event.addAction(action);
-                }
-            }
 
             eventRepository.save(event);
             log.info("분석 결과 추가 완료: eventId={}", eventId);
