@@ -4,6 +4,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.entity.EventAction;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
@@ -39,25 +40,6 @@ public class AgentWebhookController {
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
-
-    @GetMapping("/test/clip/{cameraName}")
-    public ResponseEntity<?> testClipExtraction(@PathVariable String cameraName) {
-        log.info("클립 추출 테스트: cameraName={}", cameraName);
-
-        try {
-            UUID testId = UUID.randomUUID();
-            String clipUrl = clipExtractionService.extractAndSaveClip(cameraName, testId);
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "clipUrl", clipUrl,
-                    "testEventId", testId.toString()
-            ));
-        } catch (Exception e) {
-            log.error("클립 추출 테스트 실패: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("success", false, "error", e.getMessage()));
-        }
-    }
 
 
     /**
@@ -125,10 +107,21 @@ public class AgentWebhookController {
 
             event.setSummary(request.getSummary());
             event.setRiskScore(request.getRiskScore());
-            event.setActions(request.getActions());
             event.setRagReferences(request.getRagReferences());
             event.setReport(request.getReport());
             event.setStatus(EventStatus.ANALYZED);
+
+            // 액션 로그 처리 (1:N 관계)
+            if (request.getActions() != null) {
+                event.getActions().clear();
+                for (AnalysisResultRequest.ActionRequest actionReq : request.getActions()) {
+                    EventAction action = EventAction.builder()
+                            .log(actionReq.getLog())
+                            .triggeredAt(LocalDateTime.parse(actionReq.getTriggeredAt()))
+                            .build();
+                    event.addAction(action);
+                }
+            }
 
             eventRepository.save(event);
             log.info("분석 결과 추가 완료: eventId={}", eventId);

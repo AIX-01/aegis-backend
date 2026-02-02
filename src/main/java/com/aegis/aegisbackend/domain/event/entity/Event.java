@@ -13,6 +13,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -67,20 +68,25 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String clipUrl;
 
+    /** AI 분석 요약 */
     @Column(columnDefinition = "TEXT")
     private String summary;
 
+    /** 위험 점수 */
     @Column(length = 10)
     private String riskScore;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private List<Map<String, Object>> actions;
+    /** 권장 조치 목록 (1:N 관계) */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<EventAction> actions = new ArrayList<>();
 
+    /** RAG 참조 문서 */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<Map<String, Object>> ragReferences;
 
+    /** 상세 보고서 */
     @Column(columnDefinition = "TEXT")
     private String report;
 
@@ -95,4 +101,17 @@ public class Event {
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<Notification> notifications = new HashSet<>();
+
+    /** 액션 추가 헬퍼 메서드 */
+    public void addAction(EventAction action) {
+        actions.add(action);
+        action.setEvent(this);
+    }
+
+    /** 액션 일괄 추가 헬퍼 메서드 */
+    public void addActions(List<EventAction> newActions) {
+        for (EventAction action : newActions) {
+            addAction(action);
+        }
+    }
 }
