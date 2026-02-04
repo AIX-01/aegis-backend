@@ -36,6 +36,9 @@ public class S3Config {
     @Value("${aws.s3.bucket}")
     private String bucketName;
 
+    @Value("${clip.download-endpoint:https://localhost}")
+    private String downloadEndpoint;
+
     @Bean
     public S3Client s3Client() {
         S3ClientBuilder builder = S3Client.builder()
@@ -96,5 +99,22 @@ public class S3Config {
         }
 
         return builder.build();
+    }
+
+    /**
+     * 다운로드용 Presigner (Caddy 프록시 도메인으로 서명)
+     */
+    @Bean("downloadPresigner")
+    public S3Presigner downloadPresigner() {
+        return S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)
+                ))
+                .endpointOverride(URI.create(downloadEndpoint))
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(true)
+                        .build())
+                .build();
     }
 }

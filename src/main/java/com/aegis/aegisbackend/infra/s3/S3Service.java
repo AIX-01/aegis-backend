@@ -21,11 +21,11 @@ import java.util.UUID;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class S3Service {
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
+    private final S3Presigner downloadPresigner;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
@@ -39,11 +39,13 @@ public class S3Service {
     @Value("${clip.presigned-url-expiration:3600}")
     private int presignedUrlExpiration;
 
-    @Value("${clip.upload-endpoint:http://localhost:9000}")
-    private String uploadEndpoint;
 
-    @Value("${clip.download-endpoint:/clips}")
-    private String downloadEndpoint;
+    public S3Service(S3Client s3Client, S3Presigner s3Presigner,
+                     @org.springframework.beans.factory.annotation.Qualifier("downloadPresigner") S3Presigner downloadPresigner) {
+        this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
+        this.downloadPresigner = downloadPresigner;
+    }
 
     /**
      * 클립 업로드용 presigned PUT URL 생성 (Python Agent용)
@@ -70,6 +72,7 @@ public class S3Service {
 
     /**
      * 클립 다운로드용 presigned GET URL 생성 (브라우저용, Caddy 프록시 경유)
+     * downloadPresigner가 Caddy 도메인으로 서명하여 signature 일치 보장
      */
     public String generateDownloadUrl(UUID eventId) {
         String key = getClipKey(eventId);
@@ -84,14 +87,9 @@ public class S3Service {
                 .getObjectRequest(getRequest)
                 .build();
 
-        String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
-
-        // presigned URL에서 query string 추출하여 Caddy 프록시 경로와 결합
-        String queryString = presignedUrl.substring(presignedUrl.indexOf('?'));
-        String downloadUrl = downloadEndpoint + "/" + eventId + ".mp4" + queryString;
-
-        log.debug("다운로드 presigned URL 생성: eventId={}, url={}", eventId, downloadUrl);
-        return downloadUrl;
+        String presignedUrl = downloadPresigner.presignGetObject(presignRequest).url().toString();
+        log.info("다운로드 presigned URL 생성: eventId={}, url={}", eventId, presignedUrl);
+        return presignedUrl;
     }
 
     /**
