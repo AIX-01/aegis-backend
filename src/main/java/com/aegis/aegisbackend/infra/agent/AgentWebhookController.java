@@ -88,25 +88,47 @@ public class AgentWebhookController {
     }
 
     /**
-     * 클립 확정 (temp/clips → clips 이동)
+     * 클립 업로드용 presigned URL 발급
      */
-    @PostMapping("/events/{eventId}/clip")
+    @GetMapping("/events/{eventId}/clip/upload-url")
+    public ResponseEntity<?> getClipUploadUrl(@PathVariable UUID eventId) {
+        log.info("클립 업로드 URL 요청: eventId={}", eventId);
+
+        try {
+            // 이벤트 존재 확인
+            eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            String uploadUrl = s3Service.generateUploadUrl(eventId);
+            return ResponseEntity.ok(Map.of("uploadUrl", uploadUrl));
+
+        } catch (BusinessException e) {
+            log.error("업로드 URL 생성 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 클립 업로드 완료 확인
+     */
+    @PostMapping("/events/{eventId}/clip/confirm")
     public ResponseEntity<?> confirmClip(@PathVariable UUID eventId) {
-        log.info("클립 확정 요청: eventId={}", eventId);
+        log.info("클립 업로드 완료 확인: eventId={}", eventId);
 
         try {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            // temp/clips/{eventId}.mp4 존재 확인
-            if (!s3Service.tempClipExists(eventId)) {
-                log.warn("임시 클립을 찾을 수 없음: eventId={}", eventId);
+            // 클립 존재 확인
+            if (!s3Service.clipExists(eventId)) {
+                log.warn("클립을 찾을 수 없음: eventId={}", eventId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "임시 클립을 찾을 수 없습니다"));
+                        .body(Map.of("error", "클립을 찾을 수 없습니다"));
             }
 
-            // clips/{eventId}.mp4로 이동
-            String clipUrl = s3Service.moveClipFromTemp(eventId);
+            // clipUrl 저장 (presigned 없는 기본 경로)
+            String clipUrl = "clips/" + eventId + ".mp4";
             event.setClipUrl(clipUrl);
             eventRepository.save(event);
 

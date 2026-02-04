@@ -79,10 +79,10 @@ public class EventController {
     }
 
     /**
-     * 클립 다운로드
+     * 클립 재생용 presigned URL 반환
      */
-    @GetMapping("/{id}/clip")
-    public ResponseEntity<byte[]> downloadClip(@PathVariable UUID id) {
+    @GetMapping("/{id}/clip-url")
+    public ResponseEntity<Map<String, String>> getClipUrl(@PathVariable UUID id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
@@ -90,26 +90,15 @@ public class EventController {
             return ResponseEntity.notFound().build();
         }
 
-        byte[] clipData = s3Service.downloadClip(event.getClipUrl());
-        if (clipData == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        String filename = "event_" + id + ".mp4";
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.parseMediaType("video/mp4"))
-                .body(clipData);
+        String presignedUrl = s3Service.generateDownloadUrl(id);
+        return ResponseEntity.ok(Map.of("url", presignedUrl));
     }
 
     /**
-     * 클립 스트리밍 (Range 지원)
+     * 클립 다운로드용 presigned URL 반환
      */
-    @GetMapping("/{id}/clip/stream")
-    public ResponseEntity<byte[]> streamClip(
-            @PathVariable UUID id,
-            @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
-
+    @GetMapping("/{id}/clip/download-url")
+    public ResponseEntity<Map<String, String>> getClipDownloadUrl(@PathVariable UUID id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
@@ -117,48 +106,7 @@ public class EventController {
             return ResponseEntity.notFound().build();
         }
 
-        byte[] clipData = s3Service.downloadClip(event.getClipUrl());
-        if (clipData == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        long fileSize = clipData.length;
-
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            try {
-                String[] ranges = rangeHeader.substring(6).split("-");
-                long start = Long.parseLong(ranges[0]);
-                long end = ranges.length > 1 && !ranges[1].isEmpty()
-                        ? Long.parseLong(ranges[1])
-                        : fileSize - 1;
-
-                if (start >= fileSize) {
-                    return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                            .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
-                            .build();
-                }
-
-                end = Math.min(end, fileSize - 1);
-                long contentLength = end - start + 1;
-
-                byte[] partialData = new byte[(int) contentLength];
-                System.arraycopy(clipData, (int) start, partialData, 0, (int) contentLength);
-
-                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                        .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
-                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
-                        .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(contentLength))
-                        .body(partialData);
-            } catch (NumberFormatException e) {
-                return ResponseEntity.badRequest().build();
-            }
-        }
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileSize))
-                .body(clipData);
+        String presignedUrl = s3Service.generateDownloadUrl(id);
+        return ResponseEntity.ok(Map.of("url", presignedUrl, "filename", "event_" + id + ".mp4"));
     }
 }

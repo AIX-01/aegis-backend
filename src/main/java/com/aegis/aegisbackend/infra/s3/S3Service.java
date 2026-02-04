@@ -8,7 +8,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,6 +25,7 @@ import java.util.UUID;
 public class S3Service {
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     @Value("${aws.s3.bucket}")
     private String bucketName;
@@ -30,6 +35,56 @@ public class S3Service {
 
     @Value("${clip.temp-path:temp/clips}")
     private String tempClipPath;
+
+    @Value("${clip.presigned-url-expiration:3600}")
+    private int presignedUrlExpiration;
+
+    /**
+     * 클립 업로드용 presigned PUT URL 생성
+     */
+    public String generateUploadUrl(UUID eventId) {
+        String key = clipPath + "/" + eventId + ".mp4";
+
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .contentType("video/mp4")
+                .build();
+
+        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(10))
+                .putObjectRequest(putRequest)
+                .build();
+
+        String url = s3Presigner.presignPutObject(presignRequest).url().toString();
+        log.debug("업로드 presigned URL 생성: eventId={}", eventId);
+        return url;
+    }
+
+    /**
+     * 클립 다운로드용 presigned GET URL 생성 (Caddy 프록시 경로로 변환)
+     */
+    public String generateDownloadUrl(UUID eventId) {
+        String key = clipPath + "/" + eventId + ".mp4";
+
+        GetObjectRequest getRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofSeconds(presignedUrlExpiration))
+                .getObjectRequest(getRequest)
+                .build();
+
+        String minioUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
+
+        // MinIO URL을 Caddy 프록시 경로로 변환
+        // 예: http://localhost:9000/aegis/clips/xxx.mp4?... → /clips/xxx.mp4?...
+        String clipUrl = minioUrl.replaceFirst(".*?/" + bucketName + "/", "/");
+        log.debug("다운로드 presigned URL 생성: eventId={}", eventId);
+        return clipUrl;
+    }
 
     /**
      * temp/clips/{eventId}.mp4 존재 확인
