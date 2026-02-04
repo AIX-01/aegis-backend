@@ -222,7 +222,7 @@ src/main/java/com/aegis/aegisbackend/
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/` | 카메라 목록 (페이지네이션, 기본 size=6) |
-| GET | `/all` | 카메라 전체 목록 |
+| GET | `/all` | 카메라 전체 목록 (멤버 관리 - 카메라 할당용) |
 | GET | `/{id}` | 카메라 상세 |
 | PATCH | `/{id}` | 카메라 수정 |
 
@@ -248,6 +248,38 @@ src/main/java/com/aegis/aegisbackend/
 }
 ```
 
+#### GET /api/cameras/all
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "UUID",
+    "name": "카메라명",
+    "location": "장소",
+    "connected": true,
+    "enabled": true,
+    "analysisEnabled": true,
+    "streamUrl": "/stream/{name}/whep"
+  }
+]
+```
+
+#### GET /api/cameras/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "name": "카메라명",
+  "location": "장소",
+  "connected": true,
+  "enabled": true,
+  "analysisEnabled": true,
+  "streamUrl": "/stream/{name}/whep"
+}
+```
+
 #### PATCH /api/cameras/{id}
 
 **Request:**
@@ -256,6 +288,19 @@ src/main/java/com/aegis/aegisbackend/
   "location": "string (선택)",
   "enabled": "boolean (선택)",
   "analysisEnabled": "boolean (선택)"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "name": "카메라명",
+  "location": "장소",
+  "connected": true,
+  "enabled": true,
+  "analysisEnabled": true,
+  "streamUrl": "/stream/{name}/whep"
 }
 ```
 
@@ -320,13 +365,69 @@ src/main/java/com/aegis/aegisbackend/
 | GET | `/` | 알림 목록 |
 | DELETE | `/` | 전체 삭제 |
 
+#### GET /api/notifications
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "UUID",
+    "type": "alert | warning | info | success",
+    "title": "알림 제목",
+    "message": "알림 메시지",
+    "timestamp": "2026-01-31T12:00:00",
+    "eventId": "UUID (nullable)"
+  }
+]
+```
+
+#### DELETE /api/notifications
+
+**Response:** `200 OK`
+```json
+{
+  "success": true
+}
+```
+
 ### Stats API (`/api/stats`)
 
 | Method | Path | 설명 |
 |--------|------|------|
+| GET | `/` | 전체 통계 (type 미지정 시) |
 | GET | `/?type=daily` | 일별 통계 (주간) |
 | GET | `/?type=event-types` | 유형별 통계 |
 | GET | `/?type=monthly` | 월별 통계 |
+
+#### GET /api/stats?type=daily
+
+**Response:** `200 OK`
+```json
+[
+  { "day": "일", "events": 5, "resolved": 3 },
+  { "day": "월", "events": 8, "resolved": 6 }
+]
+```
+
+#### GET /api/stats?type=event-types
+
+**Response:** `200 OK`
+```json
+[
+  { "type": "assault", "count": 10, "color": "#ef4444" },
+  { "type": "burglary", "count": 5, "color": "#f97316" }
+]
+```
+
+#### GET /api/stats?type=monthly
+
+**Response:** `200 OK`
+```json
+{
+  "2026-01-15": { "events": 5, "alerts": 2 },
+  "2026-01-16": { "events": 3, "alerts": 1 }
+}
+```
 
 ### User API (`/api/users`) - Admin 전용
 
@@ -338,6 +439,41 @@ src/main/java/com/aegis/aegisbackend/
 | DELETE | `/{id}` | 사용자 삭제 |
 | PATCH | `/{id}/approve` | 사용자 승인 |
 
+#### GET /api/users
+
+**Response:** `200 OK` (PageResponse)
+```json
+{
+  "content": [
+    {
+      "id": "UUID",
+      "email": "user@example.com",
+      "name": "사용자명",
+      "role": "user | admin",
+      "approved": true,
+      "assignedCameras": ["UUID 배열"] 또는 ["all"],
+      "createdAt": "2026-01-31T12:00:00"
+    }
+  ],
+  "page": 0, "size": 20, "totalElements": 10, "totalPages": 1, "first": true, "last": true
+}
+```
+
+#### GET /api/users/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
+}
+```
+
 #### PATCH /api/users/{id}
 
 **Request:**
@@ -346,6 +482,43 @@ src/main/java/com/aegis/aegisbackend/
   "name": "string (선택)",
   "role": "user | admin (선택)",
   "assignedCameras": ["카메라 UUID 배열"] 또는 ["all"] (선택)
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
+}
+```
+
+#### DELETE /api/users/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "success": true
+}
+```
+
+#### PATCH /api/users/{id}/approve
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
 }
 ```
 
