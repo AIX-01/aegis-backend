@@ -39,8 +39,14 @@ public class S3Service {
     @Value("${clip.presigned-url-expiration:3600}")
     private int presignedUrlExpiration;
 
+    @Value("${clip.upload-endpoint:http://localhost:9000}")
+    private String uploadEndpoint;
+
+    @Value("${clip.download-endpoint:/clips}")
+    private String downloadEndpoint;
+
     /**
-     * 클립 업로드용 presigned PUT URL 생성
+     * 클립 업로드용 presigned PUT URL 생성 (Python Agent용)
      */
     public String generateUploadUrl(UUID eventId) {
         String key = clipPath + "/" + eventId + ".mp4";
@@ -56,13 +62,18 @@ public class S3Service {
                 .putObjectRequest(putRequest)
                 .build();
 
-        String url = s3Presigner.presignPutObject(presignRequest).url().toString();
-        log.debug("업로드 presigned URL 생성: eventId={}", eventId);
-        return url;
+        String presignedUrl = s3Presigner.presignPutObject(presignRequest).url().toString();
+
+        // presigned URL의 host 부분을 uploadEndpoint로 교체
+        String queryString = presignedUrl.substring(presignedUrl.indexOf('?'));
+        String uploadUrl = uploadEndpoint + "/" + bucketName + "/" + key + queryString;
+
+        log.debug("업로드 presigned URL 생성: eventId={}, url={}", eventId, uploadUrl);
+        return uploadUrl;
     }
 
     /**
-     * 클립 다운로드용 presigned GET URL 생성 (Caddy 프록시 경로로 변환)
+     * 클립 다운로드용 presigned GET URL 생성 (브라우저용, Caddy 프록시 경유)
      */
     public String generateDownloadUrl(UUID eventId) {
         String key = clipPath + "/" + eventId + ".mp4";
@@ -77,13 +88,14 @@ public class S3Service {
                 .getObjectRequest(getRequest)
                 .build();
 
-        String minioUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
+        String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
 
-        // MinIO URL을 Caddy 프록시 경로로 변환
-        // 예: http://localhost:9000/aegis/clips/xxx.mp4?... → /clips/xxx.mp4?...
-        String clipUrl = minioUrl.replaceFirst(".*?/" + bucketName + "/", "/");
-        log.debug("다운로드 presigned URL 생성: eventId={}", eventId);
-        return clipUrl;
+        // presigned URL의 query string만 추출하여 downloadEndpoint와 결합
+        String queryString = presignedUrl.substring(presignedUrl.indexOf('?'));
+        String downloadUrl = downloadEndpoint + "/" + eventId + ".mp4" + queryString;
+
+        log.debug("다운로드 presigned URL 생성: eventId={}, url={}", eventId, downloadUrl);
+        return downloadUrl;
     }
 
     /**
