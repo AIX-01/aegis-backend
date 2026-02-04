@@ -47,6 +47,7 @@ public class S3Service {
 
     /**
      * 클립 업로드용 presigned PUT URL 생성 (Python Agent용)
+     * 서명 무결성을 위해 S3Presigner가 생성한 URL을 그대로 반환
      */
     public String generateUploadUrl(UUID eventId) {
         String key = clipPath + "/" + eventId + ".mp4";
@@ -63,13 +64,8 @@ public class S3Service {
                 .build();
 
         String presignedUrl = s3Presigner.presignPutObject(presignRequest).url().toString();
-
-        // presigned URL의 host 부분을 uploadEndpoint로 교체
-        String queryString = presignedUrl.substring(presignedUrl.indexOf('?'));
-        String uploadUrl = uploadEndpoint + "/" + bucketName + "/" + key + queryString;
-
-        log.debug("업로드 presigned URL 생성: eventId={}, url={}", eventId, uploadUrl);
-        return uploadUrl;
+        log.debug("업로드 presigned URL 생성: eventId={}, url={}", eventId, presignedUrl);
+        return presignedUrl;
     }
 
     /**
