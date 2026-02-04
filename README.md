@@ -41,7 +41,9 @@ src/main/java/com/aegis/aegisbackend/
 │   │   ├── controller/EventController.java
 │   │   ├── dto/EventDto.java
 │   │   ├── entity/Event.java
+│   │   ├── entity/EventAction.java     # 이벤트 액션 로그
 │   │   ├── repository/EventRepository.java
+│   │   ├── repository/EventActionRepository.java
 │   │   └── service/EventService.java
 │   ├── notification/               # 알림
 │   │   ├── controller/NotificationController.java
