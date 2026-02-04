@@ -50,7 +50,7 @@ public class S3Service {
      * 서명 무결성을 위해 S3Presigner가 생성한 URL을 그대로 반환
      */
     public String generateUploadUrl(UUID eventId) {
-        String key = clipPath + "/" + eventId + ".mp4";
+        String key = getClipKey(eventId);
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -72,7 +72,7 @@ public class S3Service {
      * 클립 다운로드용 presigned GET URL 생성 (브라우저용, Caddy 프록시 경유)
      */
     public String generateDownloadUrl(UUID eventId) {
-        String key = clipPath + "/" + eventId + ".mp4";
+        String key = getClipKey(eventId);
 
         GetObjectRequest getRequest = GetObjectRequest.builder()
                 .bucket(bucketName)
@@ -86,12 +86,22 @@ public class S3Service {
 
         String presignedUrl = s3Presigner.presignGetObject(presignRequest).url().toString();
 
-        // presigned URL의 query string만 추출하여 downloadEndpoint와 결합
+        // presigned URL에서 query string 추출하여 Caddy 프록시 경로와 결합
         String queryString = presignedUrl.substring(presignedUrl.indexOf('?'));
         String downloadUrl = downloadEndpoint + "/" + eventId + ".mp4" + queryString;
 
         log.debug("다운로드 presigned URL 생성: eventId={}, url={}", eventId, downloadUrl);
         return downloadUrl;
+    }
+
+    /**
+     * 클립 S3 key 생성 (clipPath가 비어있으면 파일명만)
+     */
+    private String getClipKey(UUID eventId) {
+        if (clipPath == null || clipPath.isEmpty()) {
+            return eventId + ".mp4";
+        }
+        return clipPath + "/" + eventId + ".mp4";
     }
 
     /**
@@ -223,7 +233,7 @@ public class S3Service {
      * 클립 존재 여부 확인
      */
     public boolean clipExists(UUID eventId) {
-        String key = clipPath + "/" + eventId + ".mp4";
+        String key = getClipKey(eventId);
         try {
             HeadObjectRequest request = HeadObjectRequest.builder()
                     .bucket(bucketName)
