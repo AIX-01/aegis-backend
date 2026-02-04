@@ -9,6 +9,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -61,9 +62,21 @@ public class S3Config {
             client.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
             log.info("S3 버킷 확인 완료: {}", bucketName);
         } catch (NoSuchBucketException e) {
-            log.warn("S3 버킷이 존재하지 않습니다: {}", bucketName);
+            log.info("S3 버킷이 존재하지 않아 생성합니다: {}", bucketName);
+            createBucket(client);
         } catch (Exception e) {
             log.warn("S3 버킷 확인 중 오류: {}", e.getMessage());
+        }
+    }
+
+    private void createBucket(S3Client client) {
+        try {
+            client.createBucket(CreateBucketRequest.builder()
+                    .bucket(bucketName)
+                    .build());
+            log.info("S3 버킷 생성 완료: {}", bucketName);
+        } catch (Exception e) {
+            log.error("S3 버킷 생성 실패: {}", e.getMessage());
         }
     }
 
