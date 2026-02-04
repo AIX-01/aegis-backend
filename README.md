@@ -93,13 +93,13 @@ src/main/java/com/aegis/aegisbackend/
     │       ├── AnalysisResultRequest.java
     │       └── CreateEventRequest.java
     ├── mediamtx/                   # MediaMTX 연동
-    │   ├── ClipExtractionService.java
     │   ├── MediaMTXSyncService.java
     │   └── MediaMTXWebhookController.java
     ├── redis/
     │   └── RedisTokenService.java
     └── s3/
-        └── S3Service.java
+        ├── S3Service.java
+        └── TempClipCleanupScheduler.java
 ```
 
 ## 설치 및 실행
@@ -130,17 +130,15 @@ src/main/java/com/aegis/aegisbackend/
 | `AWS_S3_ACCESS_KEY` | S3 Access Key | `aegis` |
 | `AWS_S3_SECRET_KEY` | S3 Secret Key | `trillion` |
 | `AWS_S3_REGION` | S3 리전 | `us-east-1` |
-| `AWS_S3_BUCKET` | S3 버킷 | `files` |
+| `AWS_S3_BUCKET` | S3 버킷 | `aegis` |
 | `AWS_S3_ENDPOINT` | S3 엔드포인트 (MinIO용) | `http://localhost:9000` |
 | `JWT_SECRET` | JWT 서명 키 (256bit 이상) | (개발용 기본값) |
 | `JWT_ACCESS_EXPIRATION` | Access Token 만료 (ms) | `900000` (15분) |
 | `JWT_REFRESH_EXPIRATION` | Refresh Token 만료 (ms) | `604800000` (7일) |
 | `MEDIAMTX_API_URL` | MediaMTX API URL | `http://localhost:9997` |
 | `MEDIAMTX_WEBRTC_URL` | WebRTC WHEP 기본 경로 | `/stream` |
-| `MEDIAMTX_HLS_URL` | HLS 클립 추출 URL | `http://localhost:8888` |
 | `MEDIAMTX_SRT_USER` | SRT 인증 사용자 | `aegis` |
 | `MEDIAMTX_SRT_PASSWORD` | SRT 인증 비밀번호 | `trillion` |
-| `CLIP_SEGMENT_COUNT` | 클립 추출 세그먼트 수 | `10` |
 | `ADMIN_EMAIL` | 초기 Admin 이메일 | `admin@aegis.local` |
 | `ADMIN_PASSWORD` | 초기 Admin 비밀번호 | `changeyourpassword` |
 | `ADMIN_NAME` | 초기 Admin 이름 | `Admin` |
@@ -358,6 +356,7 @@ src/main/java/com/aegis/aegisbackend/
 | Method | Path | 설명 |
 |--------|------|------|
 | POST | `/events` | 이벤트 생성 |
+| POST | `/events/{id}/clip` | 클립 확정 (temp → clips 이동) |
 | PATCH | `/events/{id}/analysis` | 분석 결과 추가 |
 
 ##### POST /internal/agent/events
@@ -376,6 +375,19 @@ src/main/java/com/aegis/aegisbackend/
 ```json
 {
   "eventId": "UUID"
+}
+```
+
+##### POST /internal/agent/events/{id}/clip
+
+temp/clips/{eventId}.mp4를 clips/{eventId}.mp4로 이동하고 Event.clipUrl 저장
+
+**Request:** Body 없음
+
+**Response:** `200 OK`
+```json
+{
+  "clipUrl": "clips/{eventId}.mp4"
 }
 ```
 
@@ -705,14 +717,32 @@ erDiagram
 
 - 클립 저장/조회/삭제
 - 버킷: `aegis` (기본값, 환경변수 `AWS_S3_BUCKET`으로 변경 가능)
-- 키 형식: `events/{eventId}/clip.mp4`
+- 키 형식: `clips/{eventId}.mp4`
+
+**클립 저장 구조:**
+
+```
+aegis/
+├── clips/                  # 확정된 이벤트 클립
+│   └── {event_id}.mp4
+└── temp/
+    └── clips/              # Python Agent 임시 저장 (매 시간 정리)
+        └── {event_id}.mp4
+```
 
 ### Redis
 
-- **Refresh Token**: `refresh_token:{token}` → `userId` (TTL: 7일)
-- **동기화 잠금**: `mediamtx:sync:lock` (TTL: 1초)
-- **분석 카메라 목록**: `analysis:cameras` → JSON 배열
-- **Pub/Sub 채널**: `camera:analysis:update` (Python Agent 알림)
+| 키 | 타입 | 밸류 | TTL | 설명 |
+|---|---|---|---|---|
+| `refresh_token:{token}` | String | `userId (UUID)` | 7일 | Refresh Token → 사용자 매핑 |
+| `mediamtx:sync:lock` | String | `"locked"` | 1초 | MediaMTX 동기화 중복 방지 잠금 |
+| `analysis:cameras` | String | `[{"id":"uuid","name":"cam1","location":"1층 로비"},...]` | 없음 | AI 분석 대상 카메라 목록 (JSON 배열) |
+
+**Pub/Sub 채널:**
+
+| 채널 | 메시지 | 설명 |
+|---|---|---|
+| `camera:analysis:update` | `"sync"` | 분석 카메라 목록 변경 알림 (Python Agent 구독) |
 
 ## 빌드 및 배포
 
