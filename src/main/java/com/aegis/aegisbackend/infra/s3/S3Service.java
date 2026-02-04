@@ -6,16 +6,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
  * S3/MinIO 스토리지 서비스
- * - 이벤트 클립 업로드/다운로드/삭제
- * - 이벤트 = 메타데이터 + 클립이 함께 있는 단일 객체
  */
 @Slf4j
 @Service
@@ -27,44 +25,97 @@ public class S3Service {
     @Value("${aws.s3.bucket}")
     private String bucketName;
 
+    @Value("${clip.path:clips}")
+    private String clipPath;
+
+    @Value("${clip.temp-path:temp/clips}")
+    private String tempClipPath;
+
     /**
-     * 이벤트 클립 업로드
-     * @param eventId 이벤트 ID
-     * @param clipData 클립 바이트 데이터
-     * @param contentType MIME 타입 (video/mp2t)
-     * @return 저장된 클립 URL (events/{eventId}/clip.ts)
+     * temp/clips/{eventId}.mp4 존재 확인
      */
-    public String uploadEventClip(UUID eventId, byte[] clipData, String contentType) {
-        String key = buildEventClipKey(eventId);
-
-        log.info("S3 업로드 시작: bucket={}, key={}, size={}KB, contentType={}",
-                bucketName, key, clipData.length / 1024, contentType);
-
+    public boolean tempClipExists(UUID eventId) {
+        String key = tempClipPath + "/" + eventId + ".mp4";
         try {
-            PutObjectRequest request = PutObjectRequest.builder()
+            HeadObjectRequest request = HeadObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
-                    .contentType(contentType)
                     .build();
+            s3Client.headObject(request);
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        }
+    }
 
-            s3Client.putObject(request, RequestBody.fromBytes(clipData));
-            log.info("S3 업로드 완료: eventId={}, key={}, size={}KB", eventId, key, clipData.length / 1024);
+    /**
+     * temp/clips/{eventId}.mp4 → clips/{eventId}.mp4 이동
+     */
+    public String moveClipFromTemp(UUID eventId) {
+        String sourceKey = tempClipPath + "/" + eventId + ".mp4";
+        String destKey = clipPath + "/" + eventId + ".mp4";
 
-            return key;
+        try {
+            // 복사
+            CopyObjectRequest copyRequest = CopyObjectRequest.builder()
+                    .sourceBucket(bucketName)
+                    .sourceKey(sourceKey)
+                    .destinationBucket(bucketName)
+                    .destinationKey(destKey)
+                    .build();
+            s3Client.copyObject(copyRequest);
+
+            // 원본 삭제
+            DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(sourceKey)
+                    .build();
+            s3Client.deleteObject(deleteRequest);
+
+            log.info("클립 이동 완료: {} → {}", sourceKey, destKey);
+            return destKey;
         } catch (S3Exception e) {
-            log.error("S3 업로드 실패: eventId={}, bucket={}, key={}, error={}",
-                    eventId, bucketName, key, e.getMessage(), e);
-            throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
-        } catch (Exception e) {
-            log.error("S3 업로드 중 예외 발생: eventId={}, error={}", eventId, e.getMessage(), e);
+            log.error("클립 이동 실패: eventId={}, error={}", eventId, e.getMessage());
             throw new BusinessException(ErrorCode.S3_UPLOAD_FAILED);
         }
     }
 
     /**
-     * 클립 다운로드 (clipUrl로 직접 다운로드)
-     * @param clipUrl 클립 URL (events/{eventId}/clip.mp4)
-     * @return 클립 바이트 데이터 (없으면 null)
+     * temp/clips/ 전체 삭제
+     */
+    public void cleanupTempClips() {
+        try {
+            ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(tempClipPath + "/")
+                    .build();
+
+            ListObjectsV2Response listResponse = s3Client.listObjectsV2(listRequest);
+            List<S3Object> objects = listResponse.contents();
+
+            if (objects.isEmpty()) {
+                log.debug("정리할 임시 클립 없음");
+                return;
+            }
+
+            List<ObjectIdentifier> toDelete = objects.stream()
+                    .map(obj -> ObjectIdentifier.builder().key(obj.key()).build())
+                    .toList();
+
+            DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
+                    .bucket(bucketName)
+                    .delete(Delete.builder().objects(toDelete).build())
+                    .build();
+
+            s3Client.deleteObjects(deleteRequest);
+            log.info("임시 클립 정리 완료: {}개 삭제", objects.size());
+        } catch (S3Exception e) {
+            log.error("임시 클립 정리 실패: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 클립 다운로드
      */
     public byte[] downloadClip(String clipUrl) {
         try {
@@ -84,12 +135,10 @@ public class S3Service {
     }
 
     /**
-     * 클립 삭제 (clipUrl로 직접 삭제)
-     * @param clipUrl 클립 URL (events/{eventId}/clip.mp4)
+     * 클립 삭제
      */
     public void deleteClip(String clipUrl) {
         if (clipUrl == null || clipUrl.isEmpty()) {
-            log.debug("삭제할 클립 URL이 없음");
             return;
         }
 
@@ -108,25 +157,19 @@ public class S3Service {
     }
 
     /**
-     * 이벤트 클립 존재 여부 확인
+     * 클립 존재 여부 확인
      */
     public boolean clipExists(UUID eventId) {
-        String key = buildEventClipKey(eventId);
-
+        String key = clipPath + "/" + eventId + ".mp4";
         try {
             HeadObjectRequest request = HeadObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
                     .build();
-
             s3Client.headObject(request);
             return true;
         } catch (NoSuchKeyException e) {
             return false;
         }
-    }
-
-    private String buildEventClipKey(UUID eventId) {
-        return "events/" + eventId + "/clip.mp4";
     }
 }
