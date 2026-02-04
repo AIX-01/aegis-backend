@@ -1,6 +1,5 @@
 package com.aegis.aegisbackend.global.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -10,7 +9,6 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
 
@@ -51,26 +49,19 @@ public class S3Config {
 
         S3Client client = builder.build();
 
-        // 버킷 존재 확인 및 자동 생성
-        ensureBucketExists(client);
+        checkBucketExists(client);
 
         return client;
     }
 
-    private void ensureBucketExists(S3Client client) {
+    private void checkBucketExists(S3Client client) {
         try {
             client.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
             log.info("S3 버킷 확인 완료: {}", bucketName);
         } catch (NoSuchBucketException e) {
-            log.warn("S3 버킷이 존재하지 않습니다. 생성 시도: {}", bucketName);
-            try {
-                client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build());
-                log.info("S3 버킷 생성 완료: {}", bucketName);
-            } catch (Exception createEx) {
-                log.error("S3 버킷 생성 실패: {}, error={}", bucketName, createEx.getMessage());
-            }
+            log.warn("S3 버킷이 존재하지 않습니다: {}", bucketName);
         } catch (Exception e) {
-            log.warn("S3 버킷 확인 중 오류 (무시됨): {}", e.getMessage());
+            log.warn("S3 버킷 확인 중 오류: {}", e.getMessage());
         }
     }
 }
