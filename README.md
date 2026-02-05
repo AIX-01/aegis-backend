@@ -1169,7 +1169,7 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ## 🐛 Known Issues
 
-> 최종 감사일: 2026-02-04
+> 최종 감사일: 2026-02-05
 
 ### 고아 코드
 
@@ -1194,12 +1194,6 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 | `DataInitializer.java` | Admin 비밀번호 기본값 | 🟡 중간 | 환경 변수로 주입 또는 첫 로그인 시 변경 강제 |
 | `/internal/**` 경로 | 인증 없음 (내부망 가정) | 🟡 중간 | 운영환경에서 IP 화이트리스트 적용 |
 
-### 논리적 불일치
-
-| 파일 | 문제 | 상세 |
-|------|------|------|
-| `EventController.java` | 클립 다운로드 API 미구현 | README에 명시된 `/events/{id}/clip/download-url` 엔드포인트 없음 |
-| `TempClipCleanupScheduler.java` | 스케줄러 미구현 | 클래스만 존재, 실제 정리 로직 없음 |
 
 ### 기타
 
