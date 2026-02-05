@@ -108,70 +108,6 @@ src/main/java/com/aegis/aegisbackend/
 
 ## 핵심 워크플로우
 
-### 시스템 아키텍처 다이어그램
-
-```mermaid
-graph TD
-    subgraph Client["클라이언트"]
-        Browser[브라우저]
-    end
-
-    subgraph Backend["Spring Boot Backend"]
-        Auth[AuthController]
-        Camera[CameraController]
-        Event[EventController]
-        Notif[NotificationController]
-        Stats[StatsController]
-        User[UserController]
-        
-        AgentWH[AgentWebhookController]
-        MTXSync[MediaMTXSyncService]
-        MTXAuth[MediaMTXWebhookController]
-        
-        SSE[SseEmitterService]
-        S3[S3Service]
-        Redis[RedisTokenService]
-    end
-
-    subgraph External["외부 시스템"]
-        PG[(PostgreSQL)]
-        RD[(Redis)]
-        MinIO[(MinIO/S3)]
-        MTX[MediaMTX]
-        Agent[AI Agent]
-    end
-
-    Browser --> Auth
-    Browser --> Camera
-    Browser --> Event
-    Browser --> Notif
-    Browser --> Stats
-    Browser --> User
-    
-    Auth --> PG
-    Auth --> Redis
-    Auth --> RD
-    
-    Camera --> PG
-    Camera --> MTXSync
-    Camera --> RD
-    
-    Event --> PG
-    Event --> S3
-    Event --> MinIO
-    
-    SSE --> Browser
-    
-    Agent --> AgentWH
-    AgentWH --> PG
-    AgentWH --> S3
-    AgentWH --> SSE
-    
-    MTX --> MTXSync
-    MTX --> MTXAuth
-    MTXSync --> PG
-    MTXSync --> RD
-```
 
 ### 1. 카메라 동기화 흐름
 
@@ -1169,7 +1105,7 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ## 🐛 Known Issues
 
-> 최종 감사일: 2026-02-04
+> 최종 감사일: 2026-02-05
 
 ### 고아 코드
 
@@ -1177,6 +1113,8 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 |------|------|------|
 | `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
 | `UserService.java` | `getAllUsers()` 미사용 | 페이지네이션 버전 `getUsersPaged()`만 사용 중 |
+| `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
+| `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 
 ### 미구현 코드
 
@@ -1194,12 +1132,6 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 | `DataInitializer.java` | Admin 비밀번호 기본값 | 🟡 중간 | 환경 변수로 주입 또는 첫 로그인 시 변경 강제 |
 | `/internal/**` 경로 | 인증 없음 (내부망 가정) | 🟡 중간 | 운영환경에서 IP 화이트리스트 적용 |
 
-### 논리적 불일치
-
-| 파일 | 문제 | 상세 |
-|------|------|------|
-| `EventController.java` | 클립 다운로드 API 미구현 | README에 명시된 `/events/{id}/clip/download-url` 엔드포인트 없음 |
-| `TempClipCleanupScheduler.java` | 스케줄러 미구현 | 클래스만 존재, 실제 정리 로직 없음 |
 
 ### 기타
 
