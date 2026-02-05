@@ -108,70 +108,53 @@ src/main/java/com/aegis/aegisbackend/
 
 ## 핵심 워크플로우
 
-### 시스템 아키텍처 다이어그램
+### 시스템 아키텍처
 
-```mermaid
-graph TD
-    subgraph Client["클라이언트"]
-        Browser[브라우저]
-    end
-
-    subgraph Backend["Spring Boot Backend"]
-        Auth[AuthController]
-        Camera[CameraController]
-        Event[EventController]
-        Notif[NotificationController]
-        Stats[StatsController]
-        User[UserController]
-        
-        AgentWH[AgentWebhookController]
-        MTXSync[MediaMTXSyncService]
-        MTXAuth[MediaMTXWebhookController]
-        
-        SSE[SseEmitterService]
-        S3[S3Service]
-        Redis[RedisTokenService]
-    end
-
-    subgraph External["외부 시스템"]
-        PG[(PostgreSQL)]
-        RD[(Redis)]
-        MinIO[(MinIO/S3)]
-        MTX[MediaMTX]
-        Agent[AI Agent]
-    end
-
-    Browser --> Auth
-    Browser --> Camera
-    Browser --> Event
-    Browser --> Notif
-    Browser --> Stats
-    Browser --> User
-    
-    Auth --> PG
-    Auth --> Redis
-    Auth --> RD
-    
-    Camera --> PG
-    Camera --> MTXSync
-    Camera --> RD
-    
-    Event --> PG
-    Event --> S3
-    Event --> MinIO
-    
-    SSE --> Browser
-    
-    Agent --> AgentWH
-    AgentWH --> PG
-    AgentWH --> S3
-    AgentWH --> SSE
-    
-    MTX --> MTXSync
-    MTX --> MTXAuth
-    MTXSync --> PG
-    MTXSync --> RD
 ```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         클라이언트                                    │
+│  ┌──────────┐                                                       │
+│  │ 브라우저  │ ─── REST/SSE ───┐                                    │
+│  └──────────┘                  │                                    │
+└────────────────────────────────┼────────────────────────────────────┘
+                                 │
+┌────────────────────────────────┼────────────────────────────────────┐
+│                    Spring Boot │Backend                             │
+│  ┌─────────────────────────────┴─────────────────────────────────┐  │
+│  │                    Public API (/api/*)                        │  │
+│  │  Auth · Camera · Event · Notification · Stats · User          │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                   Internal API (/internal/*)                  │  │
+│  │  Agent Webhook · MediaMTX Auth/Sync                           │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                        Services                               │  │
+│  │  SSE Emitter · S3 Service · Redis Token                       │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────┬──────────────────┬──────────────────┬──────────────────────┘
+          │                  │                  │
+          ▼                  ▼                  ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  PostgreSQL  │    │    Redis     │    │    MinIO     │
+│   (5432)     │    │   (6379)     │    │   (9000)     │
+└──────────────┘    └──────────────┘    └──────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                          외부 시스템                                  │
+│  ┌──────────────┐                         ┌──────────────┐          │
+│  │   AI Agent   │ ── Webhook ──▶ Backend  │   MediaMTX   │          │
+│  │  (Python)    │                         │  (8554/8889) │          │
+│  └──────────────┘                         └──────────────┘          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**API 계층:**
+
+| 계층 | 경로 | 인증 | 호출자 |
+|------|------|------|--------|
+| Public API | `/api/*` | JWT 필요 | 브라우저 |
+| Internal API | `/internal/*` | 없음 (내부망) | AI Agent, MediaMTX |
 
 ### 1. 카메라 동기화 흐름
 
@@ -593,7 +576,6 @@ graph TD
 ```
 
 **Error:** `404 Not Found` (보고서가 없는 경우)
-```
 
 ### Notification API (`/api/notifications`)
 
@@ -1139,8 +1121,6 @@ aegis/
 ```
 
 **참고**: `temp/clips/` 경로와 관련 메서드(`tempClipExists`, `moveClipFromTemp`)는 현재 사용되지 않습니다 (Known Issues 참조).
-        └── {event_id}.mp4
-```
 
 ### Redis
 
