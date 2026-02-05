@@ -192,25 +192,29 @@ graph TD
 ### 2. AI Agent 이벤트 생성 흐름
 
 ```
-1. AI Agent → POST /internal/agent/events (1차 분석 결과)
+1. AI Agent: VLM 1차 분석 수행 → 이상 감지
+
+2. AI Agent → POST /internal/agent/events (1차 분석 결과)
    - Request: { cameraId, risk, type, occurredAt }
    - 이벤트 생성 (status=PROCESSING)
    - 알림 생성 (NotificationService.createEventNotifications)
    - SSE 브로드캐스트 (event)
    - Response: { eventId }
 
-2. AI Agent → GET /internal/agent/events/{id}/clip/upload-url
-   - S3 presigned PUT URL 생성 (temp/clips/{eventId}.mp4)
+3. AI Agent → GET /internal/agent/events/{id}/clip/upload-url
+   - S3 presigned PUT URL 생성 (clips/{eventId}.mp4, 10분 만료)
    - Response: { uploadUrl }
 
-3. AI Agent → presigned URL로 직접 S3 업로드
+4. AI Agent → presigned URL로 MinIO에 직접 업로드
 
-4. AI Agent → POST /internal/agent/events/{id}/clip/confirm
-   - S3에서 클립 존재 확인
-   - Event.clipUrl = "clips/{eventId}.mp4" 저장
+5. AI Agent → POST /internal/agent/events/{id}/clip/confirm
+   - S3에서 클립 존재 확인 (clips/{eventId}.mp4)
+   - Event.clipUrl 저장
    - SSE 브로드캐스트 (event)
 
-5. AI Agent → PATCH /internal/agent/events/{id}/analysis (2차 분석 결과)
+6. AI Agent: LangGraph 정밀 분석 파이프라인 실행
+
+7. AI Agent → PATCH /internal/agent/events/{id}/analysis (2차 분석 결과)
    - Request: { risk, type, summary, riskScore }
    - Event 업데이트 (status=ANALYZED)
    - 분석 완료 알림 생성
@@ -328,10 +332,11 @@ graph TD
 
 | 메서드 | 기능 | 특이사항 |
 |--------|------|----------|
-| `generateUploadUrl()` | 업로드 URL 생성 | temp/clips/{eventId}.mp4, 15분 만료 |
+| `generateUploadUrl()` | 업로드 URL 생성 | clips/{eventId}.mp4, 10분 만료 |
+| `generateDownloadUrl()` | 다운로드 URL 생성 | Caddy 도메인으로 서명 |
 | `clipExists()` | 클립 존재 확인 | clips/{eventId}.mp4 확인 |
-| `getClipStream()` | 클립 스트리밍 | Range 헤더 지원 |
 | `deleteClip()` | 클립 삭제 | 이벤트 삭제 시 호출 |
+| `cleanupTempClips()` | 임시 클립 정리 | 매 시간 temp/clips/ 전체 삭제 (현재 미사용) |
 
 ---
 
@@ -784,9 +789,9 @@ graph TD
 }
 ```
 
-##### POST /internal/agent/events/{id}/clip
+##### POST /internal/agent/events/{id}/clip/confirm
 
-temp/clips/{eventId}.mp4를 clips/{eventId}.mp4로 이동하고 Event.clipUrl 저장
+clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 
 **Request:** Body 없음
 
@@ -1129,10 +1134,11 @@ erDiagram
 
 ```
 aegis/
-├── clips/                  # 확정된 이벤트 클립
-│   └── {event_id}.mp4
-└── temp/
-    └── clips/              # Python Agent 임시 저장 (매 시간 정리)
+└── clips/                  # 이벤트 클립 (Agent가 presigned URL로 직접 업로드)
+    └── {event_id}.mp4
+```
+
+**참고**: `temp/clips/` 경로와 관련 메서드(`tempClipExists`, `moveClipFromTemp`)는 현재 사용되지 않습니다 (Known Issues 참조).
         └── {event_id}.mp4
 ```
 
@@ -1177,6 +1183,8 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 |------|------|------|
 | `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
 | `UserService.java` | `getAllUsers()` 미사용 | 페이지네이션 버전 `getUsersPaged()`만 사용 중 |
+| `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
+| `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 
 ### 미구현 코드
 
