@@ -136,14 +136,14 @@ src/main/java/com/aegis/aegisbackend/
    - Response: { eventId }
 
 2. AI Agent → GET /internal/agent/events/{id}/clip/upload-url
-   - S3 presigned PUT URL 생성 (temp/clips/{eventId}.mp4)
+   - S3 presigned PUT URL 생성 (clips/{eventId}.mp4, 10분 만료)
    - Response: { uploadUrl }
 
-3. AI Agent → presigned URL로 직접 S3 업로드
+3. AI Agent → presigned URL로 MinIO에 직접 업로드
 
 4. AI Agent → POST /internal/agent/events/{id}/clip/confirm
-   - S3에서 클립 존재 확인
-   - Event.clipUrl = "clips/{eventId}.mp4" 저장
+   - S3에서 클립 존재 확인 (clips/{eventId}.mp4)
+   - Event.clipUrl 저장
    - SSE 브로드캐스트 (event)
 
 5. AI Agent → PATCH /internal/agent/events/{id}/analysis (2차 분석 결과)
@@ -264,9 +264,9 @@ src/main/java/com/aegis/aegisbackend/
 
 | 메서드 | 기능 | 특이사항 |
 |--------|------|----------|
-| `generateUploadUrl()` | 업로드 URL 생성 | temp/clips/{eventId}.mp4, 15분 만료 |
+| `generateUploadUrl()` | 업로드 URL 생성 | clips/{eventId}.mp4, 10분 만료 |
+| `generateDownloadUrl()` | 다운로드 URL 생성 | Caddy 도메인으로 서명 |
 | `clipExists()` | 클립 존재 확인 | clips/{eventId}.mp4 확인 |
-| `getClipStream()` | 클립 스트리밍 | Range 헤더 지원 |
 | `deleteClip()` | 클립 삭제 | 이벤트 삭제 시 호출 |
 
 ---
@@ -524,7 +524,6 @@ src/main/java/com/aegis/aegisbackend/
 ```
 
 **Error:** `404 Not Found` (보고서가 없는 경우)
-```
 
 ### Notification API (`/api/notifications`)
 
@@ -720,9 +719,9 @@ src/main/java/com/aegis/aegisbackend/
 }
 ```
 
-##### POST /internal/agent/events/{id}/clip
+##### POST /internal/agent/events/{id}/clip/confirm
 
-temp/clips/{eventId}.mp4를 clips/{eventId}.mp4로 이동하고 Event.clipUrl 저장
+clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 
 **Request:** Body 없음
 
