@@ -75,8 +75,8 @@ public class UserService {
             user.setRole(UserRole.fromValue(request.getRole()));
         }
 
-        // 할당된 카메라 업데이트
-        if (request.getAssignedCameras() != null) {
+        // 할당된 카메라 업데이트 (어드민은 카메라 권한 수정 불가 - 항상 전체 접근)
+        if (request.getAssignedCameras() != null && user.getRole() != UserRole.ADMIN) {
             // 기존 할당 삭제
             userCameraRepository.deleteByUserId(userId);
 
