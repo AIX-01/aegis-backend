@@ -81,19 +81,17 @@ public class UserService {
             userCameraRepository.deleteByUserId(userId);
 
             // 새로운 카메라 할당
-            if (!request.getAssignedCameras().contains("all")) {
-                for (String cameraIdStr : request.getAssignedCameras()) {
-                    UUID cameraId = UUID.fromString(cameraIdStr);
-                    Camera camera = cameraRepository.findById(cameraId)
-                            .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
+            for (String cameraIdStr : request.getAssignedCameras()) {
+                UUID cameraId = UUID.fromString(cameraIdStr);
+                Camera camera = cameraRepository.findById(cameraId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
-                    UserCamera userCamera = UserCamera.builder()
-                            .user(user)
-                            .camera(camera)
-                            .build();
+                UserCamera userCamera = UserCamera.builder()
+                        .user(user)
+                        .camera(camera)
+                        .build();
 
-                    userCameraRepository.save(userCamera);
-                }
+                userCameraRepository.save(userCamera);
             }
         }
 
