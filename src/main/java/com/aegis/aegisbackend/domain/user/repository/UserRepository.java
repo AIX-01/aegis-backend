@@ -34,9 +34,18 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera")
     List<User> findAllWithCameras();
 
-    // 페이지네이션 지원
-    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera",
-           countQuery = "SELECT COUNT(u) FROM User u")
-    Page<User> findAllWithCamerasPaged(Pageable pageable);
+    // 승인된 사용자 페이지네이션 (관리자 먼저, 이메일순 정렬)
+    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera WHERE u.approved = true ORDER BY u.role DESC, u.email ASC",
+           countQuery = "SELECT COUNT(u) FROM User u WHERE u.approved = true")
+    Page<User> findApprovedUsersPaged(Pageable pageable);
+
+    // 미승인 사용자 페이지네이션 (이메일순 정렬)
+    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera WHERE u.approved = false ORDER BY u.createdAt DESC",
+           countQuery = "SELECT COUNT(u) FROM User u WHERE u.approved = false")
+    Page<User> findPendingUsersPaged(Pageable pageable);
+
+    // 미승인 사용자 수
+    @Query("SELECT COUNT(u) FROM User u WHERE u.approved = false")
+    long countPendingUsers();
 }
 
