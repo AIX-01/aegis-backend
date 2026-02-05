@@ -936,21 +936,44 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ---
 
-## 🔧 알려진 이슈
+## 🐛 Known Issues
+
+> 최종 감사일: 2026-02-04
 
 ### 고아 코드
 
-#### EventService.getAllEvents() 미사용
-**파일**: `EventService.java`
+| 파일 | 문제 | 상세 |
+|------|------|------|
+| `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
+| `UserService.java` | `getAllUsers()` 미사용 | 페이지네이션 버전 `getUsersPaged()`만 사용 중 |
 
-`getAllEvents()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getEventsPaged()`만 사용 중.
+### 미구현 코드
 
-**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+| 파일 | 기능 | 현재 상태 |
+|------|------|----------|
+| `EventAction.java` | 이벤트 액션 로그 | Entity만 존재, 실제 액션 트리거 로직 미구현 |
+| `Event.ragReferences` | RAG 참조 정보 | 필드만 존재, AI Agent에서 전송하지 않음 |
+| `Event.report` | 상세 보고서 | 필드만 존재, AI Agent에서 생성하지 않음 |
 
-#### UserService.getAllUsers() 미사용
-**파일**: `UserService.java`
+### 보안 이슈
 
-`getAllUsers()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getUsersPaged()`만 사용 중.
+| 파일 | 문제 | 심각도 | 권장 조치 |
+|------|------|--------|----------|
+| `application.properties` | JWT Secret 기본값 사용 | 🔴 높음 | 환경 변수로 주입, 256bit 이상 랜덤값 사용 |
+| `DataInitializer.java` | Admin 비밀번호 기본값 | 🟡 중간 | 환경 변수로 주입 또는 첫 로그인 시 변경 강제 |
+| `/internal/**` 경로 | 인증 없음 (내부망 가정) | 🟡 중간 | 운영환경에서 IP 화이트리스트 적용 |
 
-**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+### 논리적 불일치
+
+| 파일 | 문제 | 상세 |
+|------|------|------|
+| `EventController.java` | 클립 다운로드 API 미구현 | README에 명시된 `/events/{id}/clip/download-url` 엔드포인트 없음 |
+| `TempClipCleanupScheduler.java` | 스케줄러 미구현 | 클래스만 존재, 실제 정리 로직 없음 |
+
+### 기타
+
+| 항목 | 설명 |
+|------|------|
+| SSE 타임아웃 | SseEmitterService 30분 타임아웃, 재연결 필요 |
+| 카메라 삭제 미지원 | MediaMTX 스트림 종료 시 connected=false만 처리, 삭제 API 없음 |
 
