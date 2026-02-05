@@ -1064,12 +1064,11 @@ erDiagram
 
 ```
 aegis/
-├── clips/                  # 확정된 이벤트 클립
-│   └── {event_id}.mp4
-└── temp/
-    └── clips/              # Python Agent 임시 저장 (매 시간 정리)
-        └── {event_id}.mp4
+└── clips/                  # 이벤트 클립 (Agent가 presigned URL로 직접 업로드)
+    └── {event_id}.mp4
 ```
+
+**참고**: `temp/clips/` 경로와 관련 메서드(`tempClipExists`, `moveClipFromTemp`)는 현재 사용되지 않습니다 (Known Issues 참조).
 
 ### Redis
 
