@@ -267,7 +267,9 @@ src/main/java/com/aegis/aegisbackend/
 | `generateUploadUrl()` | 업로드 URL 생성 | clips/{eventId}.mp4, 10분 만료 |
 | `generateDownloadUrl()` | 다운로드 URL 생성 | Caddy 도메인으로 서명 |
 | `clipExists()` | 클립 존재 확인 | clips/{eventId}.mp4 확인 |
+| `downloadClip()` | 클립 다운로드 | byte[] 반환 |
 | `deleteClip()` | 클립 삭제 | 이벤트 삭제 시 호출 |
+| `cleanupTempClips()` | 임시 클립 정리 | 스케줄러에서 호출 (현재 temp/clips 미사용) |
 
 ---
 
