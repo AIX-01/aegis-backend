@@ -1,6 +1,5 @@
 package com.aegis.aegisbackend.global.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +12,8 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.S3Configuration;
 
 import java.net.URI;
 
@@ -35,6 +36,9 @@ public class S3Config {
     @Value("${aws.s3.bucket}")
     private String bucketName;
 
+    @Value("${clip.download-endpoint:https://localhost}")
+    private String downloadEndpoint;
+
     @Bean
     public S3Client s3Client() {
         S3ClientBuilder builder = S3Client.builder()
@@ -51,26 +55,66 @@ public class S3Config {
 
         S3Client client = builder.build();
 
-        // 버킷 존재 확인 및 자동 생성
-        ensureBucketExists(client);
+        checkBucketExists(client);
 
         return client;
     }
 
-    private void ensureBucketExists(S3Client client) {
+    private void checkBucketExists(S3Client client) {
         try {
             client.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
             log.info("S3 버킷 확인 완료: {}", bucketName);
         } catch (NoSuchBucketException e) {
-            log.warn("S3 버킷이 존재하지 않습니다. 생성 시도: {}", bucketName);
-            try {
-                client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build());
-                log.info("S3 버킷 생성 완료: {}", bucketName);
-            } catch (Exception createEx) {
-                log.error("S3 버킷 생성 실패: {}, error={}", bucketName, createEx.getMessage());
-            }
+            log.info("S3 버킷이 존재하지 않아 생성합니다: {}", bucketName);
+            createBucket(client);
         } catch (Exception e) {
-            log.warn("S3 버킷 확인 중 오류 (무시됨): {}", e.getMessage());
+            log.warn("S3 버킷 확인 중 오류: {}", e.getMessage());
         }
+    }
+
+    private void createBucket(S3Client client) {
+        try {
+            client.createBucket(CreateBucketRequest.builder()
+                    .bucket(bucketName)
+                    .build());
+            log.info("S3 버킷 생성 완료: {}", bucketName);
+        } catch (Exception e) {
+            log.error("S3 버킷 생성 실패: {}", e.getMessage());
+        }
+    }
+
+    @Bean
+    public S3Presigner s3Presigner() {
+        S3Presigner.Builder builder = S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)
+                ));
+
+        if (endpoint != null && !endpoint.isEmpty()) {
+            builder.endpointOverride(URI.create(endpoint))
+                    .serviceConfiguration(S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .build());
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * 다운로드용 Presigner (Caddy 프록시 도메인으로 서명)
+     */
+    @Bean("downloadPresigner")
+    public S3Presigner downloadPresigner() {
+        return S3Presigner.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)
+                ))
+                .endpointOverride(URI.create(downloadEndpoint))
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(true)
+                        .build())
+                .build();
     }
 }

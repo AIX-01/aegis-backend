@@ -41,7 +41,9 @@ src/main/java/com/aegis/aegisbackend/
 │   │   ├── controller/EventController.java
 │   │   ├── dto/EventDto.java
 │   │   ├── entity/Event.java
+│   │   ├── entity/EventAction.java     # 이벤트 액션 로그
 │   │   ├── repository/EventRepository.java
+│   │   ├── repository/EventActionRepository.java
 │   │   └── service/EventService.java
 │   ├── notification/               # 알림
 │   │   ├── controller/NotificationController.java
@@ -93,14 +95,183 @@ src/main/java/com/aegis/aegisbackend/
     │       ├── AnalysisResultRequest.java
     │       └── CreateEventRequest.java
     ├── mediamtx/                   # MediaMTX 연동
-    │   ├── ClipExtractionService.java
     │   ├── MediaMTXSyncService.java
     │   └── MediaMTXWebhookController.java
     ├── redis/
     │   └── RedisTokenService.java
     └── s3/
-        └── S3Service.java
+        ├── S3Service.java
+        └── TempClipCleanupScheduler.java
 ```
+
+---
+
+## 핵심 워크플로우
+
+
+### 1. 카메라 동기화 흐름
+
+```
+1. MediaMTX에서 스트림 시작/종료 시 runOnReady/runOnNotReady 훅 실행
+2. MediaMTX → POST /internal/mediamtx/sync 호출
+3. MediaMTXSyncService:
+   - GET /v3/paths/list로 MediaMTX API에서 스트림 목록 조회
+   - DB의 카메라 목록과 비교
+   - 새 스트림: INSERT (connected=true, enabled=false)
+   - 기존 스트림: UPDATE connected 상태
+   - 사라진 스트림: UPDATE connected=false
+4. analysisEnabled=true인 카메라 목록을 Redis에 저장 (analysis:cameras)
+5. Redis Pub/Sub으로 "camera:analysis:update" 채널에 "sync" 발행
+6. SSE로 프론트엔드에 "camera" 이벤트 브로드캐스트
+```
+
+### 2. AI Agent 이벤트 생성 흐름
+
+```
+1. AI Agent → POST /internal/agent/events (1차 분석 결과)
+   - Request: { cameraId, risk, type, occurredAt }
+   - 이벤트 생성 (status=PROCESSING)
+   - 알림 생성 (NotificationService.createEventNotifications)
+   - SSE 브로드캐스트 (event)
+   - Response: { eventId }
+
+2. AI Agent → GET /internal/agent/events/{id}/clip/upload-url
+   - S3 presigned PUT URL 생성 (clips/{eventId}.mp4, 10분 만료)
+   - Response: { uploadUrl }
+
+3. AI Agent → presigned URL로 MinIO에 직접 업로드
+
+4. AI Agent → POST /internal/agent/events/{id}/clip/confirm
+   - S3에서 클립 존재 확인 (clips/{eventId}.mp4)
+   - Event.clipUrl 저장
+   - SSE 브로드캐스트 (event)
+
+5. AI Agent → PATCH /internal/agent/events/{id}/analysis (2차 분석 결과)
+   - Request: { risk, type, summary, riskScore }
+   - Event 업데이트 (status=ANALYZED)
+   - 분석 완료 알림 생성
+   - SSE 브로드캐스트 (event)
+```
+
+### 3. WebRTC 스트림 인증 흐름
+
+```
+1. 브라우저 → POST /stream/{camera}/whep (via Caddy)
+   - Authorization: Basic base64("_:" + accessToken)
+
+2. MediaMTX → POST /internal/mediamtx/auth (인증 위임)
+   - Request: { user, password, action, path, protocol, ip }
+
+3. MediaMTXWebhookController:
+   - protocol별 분기:
+     - SRT publish: ID/PW 검증
+     - WebRTC read: password 필드의 JWT 검증 + 카메라 권한 확인
+     - RTSP/HLS read: 인증 없음 (내부망)
+   - 성공: 200 OK
+   - 실패: 401 Unauthorized
+
+4. 인증 성공 시 브라우저 ↔ MediaMTX WebRTC 연결 수립
+```
+
+### 4. 인증/토큰 관리 흐름
+
+```
+1. 로그인 (POST /api/auth/login):
+   - 이메일/비밀번호 검증
+   - Access Token 생성 (15분)
+   - Refresh Token 생성 (7일)
+   - Redis에 Refresh Token 저장 (key: refresh_token:{token}, value: userId)
+   - Cookie에 Refresh Token 설정 (HttpOnly, Secure)
+   - Response: { accessToken, user }
+
+2. API 요청:
+   - Authorization: Bearer {accessToken}
+   - JwtAuthenticationFilter에서 JWT 검증
+   - SecurityContext에 인증 정보 설정
+
+3. 토큰 갱신 (POST /api/auth/refresh):
+   - Cookie에서 Refresh Token 추출
+   - Redis에서 userId 조회
+   - 새 Access Token 발급
+   - Response: { accessToken }
+
+4. 로그아웃 (POST /api/auth/logout):
+   - Redis에서 Refresh Token 삭제
+   - Cookie 삭제
+```
+
+### 5. SSE 알림 시스템
+
+```
+1. 클라이언트 연결 (GET /api/notifications/stream):
+   - SseEmitter 생성 (타임아웃: 30분)
+   - 사용자별 Map에 저장
+   - "connect" 이벤트 전송
+
+2. 이벤트 발생 시:
+   - NotificationService: DB에 알림 저장
+   - SseEmitterService.broadcast*(): 모든 연결된 클라이언트에 전송
+
+3. 이벤트 타입:
+   - notification: 새 알림 (토스트 표시)
+   - camera: 카메라 상태 변경
+   - event: 이벤트 생성/수정
+   - event-deleted: 이벤트 삭제
+   - member: 멤버 변경
+
+4. 연결 종료/오류 시:
+   - Map에서 Emitter 제거
+   - 클라이언트 재연결 필요
+```
+
+---
+
+## 핵심 서비스 상세
+
+### AuthService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `signup()` | 회원가입 | approved=false로 생성, 관리자 승인 필요 |
+| `login()` | 로그인 | approved/deleted 검증, Refresh Token Redis 저장 |
+| `logout()` | 로그아웃 | Redis에서 Refresh Token 삭제 |
+| `refresh()` | 토큰 갱신 | Cookie의 Refresh Token으로 Access Token 재발급 |
+| `changePassword()` | 비밀번호 변경 | 현재 비밀번호 확인 후 변경 |
+| `deleteAccount()` | 회원 탈퇴 | 소프트 삭제 (deleted=true, deletedAt 기록) |
+
+### CameraService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `getCamerasPaged()` | 카메라 목록 | 권한별 필터링, 정렬: connected→enabled→location |
+| `updateCamera()` | 카메라 수정 | location, enabled, analysisEnabled 수정 가능 |
+| `syncAnalysisCamerasToRedis()` | Redis 동기화 | analysisEnabled=true 카메라를 Redis에 저장 |
+
+### EventService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `getEventsPaged()` | 이벤트 목록 | 권한별 필터링 (Admin: 전체, User: 할당 카메라만) |
+| `deleteEvent()` | 이벤트 삭제 | S3 클립 삭제 → 알림 삭제 → 이벤트 삭제 → SSE 브로드캐스트 |
+
+### MediaMTXSyncService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `syncCameras()` | 카메라 동기화 | Redis Lock으로 중복 실행 방지 (1초 TTL) |
+
+### S3Service
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `generateUploadUrl()` | 업로드 URL 생성 | clips/{eventId}.mp4, 10분 만료 |
+| `generateDownloadUrl()` | 다운로드 URL 생성 | Caddy 도메인으로 서명 |
+| `clipExists()` | 클립 존재 확인 | clips/{eventId}.mp4 확인 |
+| `downloadClip()` | 클립 다운로드 | byte[] 반환 |
+| `deleteClip()` | 클립 삭제 | 이벤트 삭제 시 호출 |
+| `cleanupTempClips()` | 임시 클립 정리 | 스케줄러에서 호출 (현재 temp/clips 미사용) |
+
+---
 
 ## 설치 및 실행
 
@@ -130,17 +301,15 @@ src/main/java/com/aegis/aegisbackend/
 | `AWS_S3_ACCESS_KEY` | S3 Access Key | `aegis` |
 | `AWS_S3_SECRET_KEY` | S3 Secret Key | `trillion` |
 | `AWS_S3_REGION` | S3 리전 | `us-east-1` |
-| `AWS_S3_BUCKET` | S3 버킷 | `files` |
+| `AWS_S3_BUCKET` | S3 버킷 | `aegis` |
 | `AWS_S3_ENDPOINT` | S3 엔드포인트 (MinIO용) | `http://localhost:9000` |
 | `JWT_SECRET` | JWT 서명 키 (256bit 이상) | (개발용 기본값) |
 | `JWT_ACCESS_EXPIRATION` | Access Token 만료 (ms) | `900000` (15분) |
 | `JWT_REFRESH_EXPIRATION` | Refresh Token 만료 (ms) | `604800000` (7일) |
 | `MEDIAMTX_API_URL` | MediaMTX API URL | `http://localhost:9997` |
 | `MEDIAMTX_WEBRTC_URL` | WebRTC WHEP 기본 경로 | `/stream` |
-| `MEDIAMTX_HLS_URL` | HLS 클립 추출 URL | `http://localhost:8888` |
 | `MEDIAMTX_SRT_USER` | SRT 인증 사용자 | `aegis` |
 | `MEDIAMTX_SRT_PASSWORD` | SRT 인증 비밀번호 | `trillion` |
-| `CLIP_SEGMENT_COUNT` | 클립 추출 세그먼트 수 | `10` |
 | `ADMIN_EMAIL` | 초기 Admin 이메일 | `admin@aegis.local` |
 | `ADMIN_PASSWORD` | 초기 Admin 비밀번호 | `changeyourpassword` |
 | `ADMIN_NAME` | 초기 Admin 이름 | `Admin` |
@@ -224,7 +393,7 @@ src/main/java/com/aegis/aegisbackend/
 | Method | Path | 설명 |
 |--------|------|------|
 | GET | `/` | 카메라 목록 (페이지네이션, 기본 size=6) |
-| GET | `/all` | 카메라 전체 목록 |
+| GET | `/all` | 카메라 전체 목록 (멤버 관리 - 카메라 할당용) |
 | GET | `/{id}` | 카메라 상세 |
 | PATCH | `/{id}` | 카메라 수정 |
 
@@ -250,6 +419,38 @@ src/main/java/com/aegis/aegisbackend/
 }
 ```
 
+#### GET /api/cameras/all
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "UUID",
+    "name": "카메라명",
+    "location": "장소",
+    "connected": true,
+    "enabled": true,
+    "analysisEnabled": true,
+    "streamUrl": "/stream/{name}/whep"
+  }
+]
+```
+
+#### GET /api/cameras/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "name": "카메라명",
+  "location": "장소",
+  "connected": true,
+  "enabled": true,
+  "analysisEnabled": true,
+  "streamUrl": "/stream/{name}/whep"
+}
+```
+
 #### PATCH /api/cameras/{id}
 
 **Request:**
@@ -258,6 +459,19 @@ src/main/java/com/aegis/aegisbackend/
   "location": "string (선택)",
   "enabled": "boolean (선택)",
   "analysisEnabled": "boolean (선택)"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "name": "카메라명",
+  "location": "장소",
+  "connected": true,
+  "enabled": true,
+  "analysisEnabled": true,
+  "streamUrl": "/stream/{name}/whep"
 }
 ```
 
@@ -312,7 +526,6 @@ src/main/java/com/aegis/aegisbackend/
 ```
 
 **Error:** `404 Not Found` (보고서가 없는 경우)
-```
 
 ### Notification API (`/api/notifications`)
 
@@ -322,13 +535,69 @@ src/main/java/com/aegis/aegisbackend/
 | GET | `/` | 알림 목록 |
 | DELETE | `/` | 전체 삭제 |
 
+#### GET /api/notifications
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "UUID",
+    "type": "alert | warning | info | success",
+    "title": "알림 제목",
+    "message": "알림 메시지",
+    "timestamp": "2026-01-31T12:00:00",
+    "eventId": "UUID (nullable)"
+  }
+]
+```
+
+#### DELETE /api/notifications
+
+**Response:** `200 OK`
+```json
+{
+  "success": true
+}
+```
+
 ### Stats API (`/api/stats`)
 
 | Method | Path | 설명 |
 |--------|------|------|
+| GET | `/` | 전체 통계 (type 미지정 시) |
 | GET | `/?type=daily` | 일별 통계 (주간) |
 | GET | `/?type=event-types` | 유형별 통계 |
 | GET | `/?type=monthly` | 월별 통계 |
+
+#### GET /api/stats?type=daily
+
+**Response:** `200 OK`
+```json
+[
+  { "day": "일", "events": 5, "resolved": 3 },
+  { "day": "월", "events": 8, "resolved": 6 }
+]
+```
+
+#### GET /api/stats?type=event-types
+
+**Response:** `200 OK`
+```json
+[
+  { "type": "assault", "count": 10, "color": "#ef4444" },
+  { "type": "burglary", "count": 5, "color": "#f97316" }
+]
+```
+
+#### GET /api/stats?type=monthly
+
+**Response:** `200 OK`
+```json
+{
+  "2026-01-15": { "events": 5, "alerts": 2 },
+  "2026-01-16": { "events": 3, "alerts": 1 }
+}
+```
 
 ### User API (`/api/users`) - Admin 전용
 
@@ -339,6 +608,41 @@ src/main/java/com/aegis/aegisbackend/
 | PATCH | `/{id}` | 사용자 수정 |
 | DELETE | `/{id}` | 사용자 삭제 |
 | PATCH | `/{id}/approve` | 사용자 승인 |
+
+#### GET /api/users
+
+**Response:** `200 OK` (PageResponse)
+```json
+{
+  "content": [
+    {
+      "id": "UUID",
+      "email": "user@example.com",
+      "name": "사용자명",
+      "role": "user | admin",
+      "approved": true,
+      "assignedCameras": ["UUID 배열"] 또는 ["all"],
+      "createdAt": "2026-01-31T12:00:00"
+    }
+  ],
+  "page": 0, "size": 20, "totalElements": 10, "totalPages": 1, "first": true, "last": true
+}
+```
+
+#### GET /api/users/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
+}
+```
 
 #### PATCH /api/users/{id}
 
@@ -351,6 +655,43 @@ src/main/java/com/aegis/aegisbackend/
 }
 ```
 
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
+}
+```
+
+#### DELETE /api/users/{id}
+
+**Response:** `200 OK`
+```json
+{
+  "success": true
+}
+```
+
+#### PATCH /api/users/{id}/approve
+
+**Response:** `200 OK`
+```json
+{
+  "id": "UUID",
+  "email": "user@example.com",
+  "name": "사용자명",
+  "role": "user | admin",
+  "approved": true,
+  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "createdAt": "2026-01-31T12:00:00"
+}
+```
+
 ### Internal API (내부망 전용)
 
 #### Agent Webhook (`/internal/agent`)
@@ -358,6 +699,7 @@ src/main/java/com/aegis/aegisbackend/
 | Method | Path | 설명 |
 |--------|------|------|
 | POST | `/events` | 이벤트 생성 |
+| POST | `/events/{id}/clip` | 클립 확정 (temp → clips 이동) |
 | PATCH | `/events/{id}/analysis` | 분석 결과 추가 |
 
 ##### POST /internal/agent/events
@@ -376,6 +718,19 @@ src/main/java/com/aegis/aegisbackend/
 ```json
 {
   "eventId": "UUID"
+}
+```
+
+##### POST /internal/agent/events/{id}/clip/confirm
+
+clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
+
+**Request:** Body 없음
+
+**Response:** `200 OK`
+```json
+{
+  "clipUrl": "clips/{eventId}.mp4"
 }
 ```
 
@@ -704,15 +1059,32 @@ erDiagram
 ### S3 (MinIO)
 
 - 클립 저장/조회/삭제
-- 버킷: `files` (기본값, 환경변수 `AWS_S3_BUCKET`으로 변경 가능)
-- 키 형식: `events/{eventId}/clip.mp4`
+- 버킷: `aegis` (기본값, 환경변수 `AWS_S3_BUCKET`으로 변경 가능)
+- 키 형식: `clips/{eventId}.mp4`
+
+**클립 저장 구조:**
+
+```
+aegis/
+└── clips/                  # 이벤트 클립 (Agent가 presigned URL로 직접 업로드)
+    └── {event_id}.mp4
+```
+
+**참고**: `temp/clips/` 경로와 관련 메서드(`tempClipExists`, `moveClipFromTemp`)는 현재 사용되지 않습니다 (Known Issues 참조).
 
 ### Redis
 
-- **Refresh Token**: `refresh_token:{token}` → `userId` (TTL: 7일)
-- **동기화 잠금**: `mediamtx:sync:lock` (TTL: 1초)
-- **분석 카메라 목록**: `analysis:cameras` → JSON 배열
-- **Pub/Sub 채널**: `camera:analysis:update` (Python Agent 알림)
+| 키 | 타입 | 밸류 | TTL | 설명 |
+|---|---|---|---|---|
+| `refresh_token:{token}` | String | `userId (UUID)` | 7일 | Refresh Token → 사용자 매핑 |
+| `mediamtx:sync:lock` | String | `"locked"` | 1초 | MediaMTX 동기화 중복 방지 잠금 |
+| `analysis:cameras` | String | `[{"id":"uuid","name":"cam1","location":"1층 로비"},...]` | 없음 | AI 분석 대상 카메라 목록 (JSON 배열) |
+
+**Pub/Sub 채널:**
+
+| 채널 | 메시지 | 설명 |
+|---|---|---|
+| `camera:analysis:update` | `"sync"` | 분석 카메라 목록 변경 알림 (Python Agent 구독) |
 
 ## 빌드 및 배포
 
@@ -731,21 +1103,40 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ---
 
-## 🔧 알려진 이슈
+## 🐛 Known Issues
+
+> 최종 감사일: 2026-02-05
 
 ### 고아 코드
 
-#### EventService.getAllEvents() 미사용
-**파일**: `EventService.java`
+| 파일 | 문제 | 상세 |
+|------|------|------|
+| `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
+| `UserService.java` | `getAllUsers()` 미사용 | 페이지네이션 버전 `getUsersPaged()`만 사용 중 |
+| `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
+| `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 
-`getAllEvents()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getEventsPaged()`만 사용 중.
+### 미구현 코드
 
-**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+| 파일 | 기능 | 현재 상태 |
+|------|------|----------|
+| `EventAction.java` | 이벤트 액션 로그 | Entity만 존재, 실제 액션 트리거 로직 미구현 |
+| `Event.ragReferences` | RAG 참조 정보 | 필드만 존재, AI Agent에서 전송하지 않음 |
+| `Event.report` | 상세 보고서 | 필드만 존재, AI Agent에서 생성하지 않음 |
 
-#### UserService.getAllUsers() 미사용
-**파일**: `UserService.java`
+### 보안 이슈
 
-`getAllUsers()` 메서드가 정의되어 있으나, 컨트롤러에서 사용하지 않음. 페이지네이션 버전인 `getUsersPaged()`만 사용 중.
+| 파일 | 문제 | 심각도 | 권장 조치 |
+|------|------|--------|----------|
+| `application.properties` | JWT Secret 기본값 사용 | 🔴 높음 | 환경 변수로 주입, 256bit 이상 랜덤값 사용 |
+| `DataInitializer.java` | Admin 비밀번호 기본값 | 🟡 중간 | 환경 변수로 주입 또는 첫 로그인 시 변경 강제 |
+| `/internal/**` 경로 | 인증 없음 (내부망 가정) | 🟡 중간 | 운영환경에서 IP 화이트리스트 적용 |
 
-**해결 방안**: 메서드 제거 또는 향후 사용 계획 시 유지
+
+### 기타
+
+| 항목 | 설명 |
+|------|------|
+| SSE 타임아웃 | SseEmitterService 30분 타임아웃, 재연결 필요 |
+| 카메라 삭제 미지원 | MediaMTX 스트림 종료 시 connected=false만 처리, 삭제 API 없음 |
 

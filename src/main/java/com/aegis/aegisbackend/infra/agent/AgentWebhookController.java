@@ -14,7 +14,7 @@ import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.agent.dto.AnalysisResultRequest;
 import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
-import com.aegis.aegisbackend.infra.mediamtx.ClipExtractionService;
+import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -34,15 +34,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AgentWebhookController {
 
-    private final ClipExtractionService clipExtractionService;
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
-
+    private final S3Service s3Service;
 
     /**
-     * 이벤트 생성 (비동기 클립 추출)
+     * 이벤트 생성
      */
     @PostMapping("/events")
     public ResponseEntity<?> createEvent(@RequestBody CreateEventRequest request) {
@@ -68,10 +67,7 @@ public class AgentWebhookController {
             Event savedEvent = eventRepository.save(event);
             log.info("이벤트 생성 완료: eventId={}", savedEvent.getId());
 
-            // 비동기 클립 추출
-            clipExtractionService.extractAndSaveClipAsync(camera.getName(), savedEvent.getId());
-
-            // 알림 생성 (ALERT)
+            // 알림 생성
             notificationService.createEventNotifications(savedEvent);
 
             // SSE 브로드캐스트
@@ -92,6 +88,69 @@ public class AgentWebhookController {
     }
 
     /**
+     * 클립 업로드용 presigned URL 발급
+     */
+    @GetMapping("/events/{eventId}/clip/upload-url")
+    public ResponseEntity<?> getClipUploadUrl(@PathVariable UUID eventId) {
+        log.info("클립 업로드 URL 요청: eventId={}", eventId);
+
+        try {
+            // 이벤트 존재 확인
+            eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            String uploadUrl = s3Service.generateUploadUrl(eventId);
+            return ResponseEntity.ok(Map.of("uploadUrl", uploadUrl));
+
+        } catch (BusinessException e) {
+            log.error("업로드 URL 생성 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 클립 업로드 완료 확인
+     */
+    @PostMapping("/events/{eventId}/clip/confirm")
+    public ResponseEntity<?> confirmClip(@PathVariable UUID eventId) {
+        log.info("클립 업로드 완료 확인: eventId={}", eventId);
+
+        try {
+            Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            // 클립 존재 확인
+            if (!s3Service.clipExists(eventId)) {
+                log.warn("클립을 찾을 수 없음: eventId={}", eventId);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "클립을 찾을 수 없습니다"));
+            }
+
+            // clipUrl 저장 (presigned 없는 기본 경로)
+            String clipUrl = "clips/" + eventId + ".mp4";
+            event.setClipUrl(clipUrl);
+            eventRepository.save(event);
+
+            log.info("클립 확정 완료: eventId={}, clipUrl={}", eventId, clipUrl);
+
+            // SSE 브로드캐스트
+            sseEmitterService.broadcastEvent(EventDto.from(event));
+
+            return ResponseEntity.ok(Map.of("clipUrl", clipUrl));
+
+        } catch (BusinessException e) {
+            log.error("클립 확정 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("클립 확정 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * 분석 결과 추가
      */
     @PatchMapping("/events/{eventId}/analysis")
@@ -104,7 +163,6 @@ public class AgentWebhookController {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            // 4개 필드만 업데이트
             if (request.getRisk() != null) {
                 event.setRisk(EventRisk.fromValue(request.getRisk()));
             }
@@ -119,11 +177,10 @@ public class AgentWebhookController {
             }
             event.setStatus(EventStatus.ANALYZED);
 
-
             eventRepository.save(event);
             log.info("분석 결과 추가 완료: eventId={}", eventId);
 
-            // 알림 생성 (WARNING)
+            // 알림 생성
             notificationService.createAnalysisNotifications(event);
 
             // SSE 브로드캐스트
