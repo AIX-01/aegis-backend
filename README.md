@@ -603,13 +603,17 @@ src/main/java/com/aegis/aegisbackend/
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/` | 사용자 목록 (페이지네이션) |
+| GET | `/` | 승인된 사용자 목록 (관리자→일반순, 이메일순) |
+| GET | `/pending` | 미승인 사용자 목록 (최신 가입순) |
+| GET | `/pending/count` | 미승인 사용자 수 |
 | GET | `/{id}` | 사용자 상세 |
-| PATCH | `/{id}` | 사용자 수정 |
+| PATCH | `/{id}` | 사용자 수정 (어드민은 카메라 권한 수정 불가) |
 | DELETE | `/{id}` | 사용자 삭제 |
 | PATCH | `/{id}/approve` | 사용자 승인 |
 
 #### GET /api/users
+
+승인된 사용자 목록 조회 (관리자 먼저, 이메일순 정렬)
 
 **Response:** `200 OK` (PageResponse)
 ```json
@@ -621,7 +625,7 @@ src/main/java/com/aegis/aegisbackend/
       "name": "사용자명",
       "role": "user | admin",
       "approved": true,
-      "assignedCameras": ["UUID 배열"] 또는 ["all"],
+      "assignedCameras": ["UUID 배열"],
       "createdAt": "2026-01-31T12:00:00"
     }
   ],
@@ -639,19 +643,21 @@ src/main/java/com/aegis/aegisbackend/
   "name": "사용자명",
   "role": "user | admin",
   "approved": true,
-  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "assignedCameras": ["UUID 배열"],
   "createdAt": "2026-01-31T12:00:00"
 }
 ```
 
 #### PATCH /api/users/{id}
 
+> 어드민 사용자는 카메라 권한(assignedCameras) 수정 불가
+
 **Request:**
 ```json
 {
   "name": "string (선택)",
   "role": "user | admin (선택)",
-  "assignedCameras": ["카메라 UUID 배열"] 또는 ["all"] (선택)
+  "assignedCameras": ["카메라 UUID 배열 (선택)"]
 }
 ```
 
@@ -663,7 +669,7 @@ src/main/java/com/aegis/aegisbackend/
   "name": "사용자명",
   "role": "user | admin",
   "approved": true,
-  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "assignedCameras": ["UUID 배열"],
   "createdAt": "2026-01-31T12:00:00"
 }
 ```
@@ -687,7 +693,7 @@ src/main/java/com/aegis/aegisbackend/
   "name": "사용자명",
   "role": "user | admin",
   "approved": true,
-  "assignedCameras": ["UUID 배열"] 또는 ["all"],
+  "assignedCameras": ["UUID 배열"],
   "createdAt": "2026-01-31T12:00:00"
 }
 ```
@@ -970,7 +976,7 @@ erDiagram
 ### 권한
 
 - `USER`: 기본 사용자 (할당된 카메라만 접근)
-- `ADMIN`: 모든 카메라 접근, 사용자 관리
+- `ADMIN`: 모든 카메라 접근 (카메라 권한 수정 불가), 사용자 관리
 
 ## SSE 알림 시스템
 
@@ -1112,7 +1118,6 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 | 파일 | 문제 | 상세 |
 |------|------|------|
 | `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
-| `UserService.java` | `getAllUsers()` 미사용 | 페이지네이션 버전 `getUsersPaged()`만 사용 중 |
 | `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
 | `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 

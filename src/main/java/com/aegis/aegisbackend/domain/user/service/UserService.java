@@ -35,22 +35,35 @@ public class UserService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
+
+    /**
+     * 승인된 사용자 목록 조회 (페이지네이션, 관리자→일반 순, 이메일순 정렬)
+     */
     @Transactional(readOnly = true)
-    public List<UserDto> getAllUsers() {
-        return userRepository.findAllWithCameras().stream()
-                .map(this::toUserDto)
-                .toList();
+    public PageResponse<UserDto> getApprovedUsersPaged(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
+        Page<User> userPage = userRepository.findApprovedUsersPaged(pageable);
+        return PageResponse.from(userPage, this::toUserDto);
     }
 
     /**
-     * 사용자 목록 조회 (페이지네이션)
+     * 미승인 사용자 목록 조회 (페이지네이션, 최신 가입순 정렬)
      */
     @Transactional(readOnly = true)
-    public PageResponse<UserDto> getUsersPaged(int page, int size) {
+    public PageResponse<UserDto> getPendingUsersPaged(int page, int size) {
         Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
-        Page<User> userPage = userRepository.findAllWithCamerasPaged(pageable);
+        Page<User> userPage = userRepository.findPendingUsersPaged(pageable);
         return PageResponse.from(userPage, this::toUserDto);
     }
+
+    /**
+     * 미승인 사용자 수 조회
+     */
+    @Transactional(readOnly = true)
+    public long countPendingUsers() {
+        return userRepository.countPendingUsers();
+    }
+
 
     @Transactional(readOnly = true)
     public UserDto getUserById(UUID userId) {
@@ -75,25 +88,23 @@ public class UserService {
             user.setRole(UserRole.fromValue(request.getRole()));
         }
 
-        // 할당된 카메라 업데이트
-        if (request.getAssignedCameras() != null) {
+        // 할당된 카메라 업데이트 (어드민은 카메라 권한 수정 불가 - 항상 전체 접근)
+        if (request.getAssignedCameras() != null && user.getRole() != UserRole.ADMIN) {
             // 기존 할당 삭제
             userCameraRepository.deleteByUserId(userId);
 
             // 새로운 카메라 할당
-            if (!request.getAssignedCameras().contains("all")) {
-                for (String cameraIdStr : request.getAssignedCameras()) {
-                    UUID cameraId = UUID.fromString(cameraIdStr);
-                    Camera camera = cameraRepository.findById(cameraId)
-                            .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
+            for (String cameraIdStr : request.getAssignedCameras()) {
+                UUID cameraId = UUID.fromString(cameraIdStr);
+                Camera camera = cameraRepository.findById(cameraId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CAMERA_NOT_FOUND));
 
-                    UserCamera userCamera = UserCamera.builder()
-                            .user(user)
-                            .camera(camera)
-                            .build();
+                UserCamera userCamera = UserCamera.builder()
+                        .user(user)
+                        .camera(camera)
+                        .build();
 
-                    userCameraRepository.save(userCamera);
-                }
+                userCameraRepository.save(userCamera);
             }
         }
 
@@ -138,8 +149,11 @@ public class UserService {
 
     /** User 엔티티를 UserDto로 변환 */
     public UserDto toUserDto(User user) {
+        // 어드민은 전체 카메라 접근 권한
         List<String> assignedCameras = user.getRole() == UserRole.ADMIN
-                ? List.of("all")
+                ? cameraRepository.findAll().stream()
+                        .map(camera -> camera.getId().toString())
+                        .toList()
                 : userCameraRepository.findCameraIdsByUserId(user.getId())
                         .stream()
                         .map(UUID::toString)

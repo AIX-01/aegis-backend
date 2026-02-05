@@ -24,14 +24,34 @@ public class UserController {
     private final UserService userService;
 
     /**
-     * 사용자 목록 조회 (페이지네이션)
+     * 승인된 사용자 목록 조회 (관리자→일반 순, 이메일순 정렬)
      */
     @GetMapping
-    public ResponseEntity<?> getUsers(
+    public ResponseEntity<?> getApprovedUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResponse<UserDto> users = userService.getUsersPaged(page, size);
+        PageResponse<UserDto> users = userService.getApprovedUsersPaged(page, size);
         return ResponseEntity.ok(users);
+    }
+
+    /**
+     * 미승인 사용자 목록 조회 (최신 가입순 정렬)
+     */
+    @GetMapping("/pending")
+    public ResponseEntity<?> getPendingUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        PageResponse<UserDto> users = userService.getPendingUsersPaged(page, size);
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * 미승인 사용자 수 조회
+     */
+    @GetMapping("/pending/count")
+    public ResponseEntity<Map<String, Long>> getPendingUsersCount() {
+        long count = userService.countPendingUsers();
+        return ResponseEntity.ok(Map.of("count", count));
     }
 
     @GetMapping("/{id}")
