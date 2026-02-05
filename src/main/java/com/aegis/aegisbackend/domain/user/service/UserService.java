@@ -35,12 +35,6 @@ public class UserService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
-    @Transactional(readOnly = true)
-    public List<UserDto> getAllUsers() {
-        return userRepository.findAllWithCameras().stream()
-                .map(this::toUserDto)
-                .toList();
-    }
 
     /**
      * 승인된 사용자 목록 조회 (페이지네이션, 관리자→일반 순, 이메일순 정렬)
@@ -70,16 +64,6 @@ public class UserService {
         return userRepository.countPendingUsers();
     }
 
-    /**
-     * @deprecated 대신 getApprovedUsersPaged 또는 getPendingUsersPaged 사용
-     */
-    @Deprecated
-    @Transactional(readOnly = true)
-    public PageResponse<UserDto> getUsersPaged(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
-        Page<User> userPage = userRepository.findApprovedUsersPaged(pageable);
-        return PageResponse.from(userPage, this::toUserDto);
-    }
 
     @Transactional(readOnly = true)
     public UserDto getUserById(UUID userId) {
@@ -165,8 +149,11 @@ public class UserService {
 
     /** User 엔티티를 UserDto로 변환 */
     public UserDto toUserDto(User user) {
+        // 어드민은 전체 카메라 접근 권한
         List<String> assignedCameras = user.getRole() == UserRole.ADMIN
-                ? List.of("all")
+                ? cameraRepository.findAll().stream()
+                        .map(camera -> camera.getId().toString())
+                        .toList()
                 : userCameraRepository.findCameraIdsByUserId(user.getId())
                         .stream()
                         .map(UUID::toString)
