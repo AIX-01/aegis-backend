@@ -35,7 +35,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findAllWithCameras();
 
     // 승인된 사용자 페이지네이션 (관리자 먼저, 이메일순 정렬)
-    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera WHERE u.approved = true ORDER BY u.role DESC, u.email ASC",
+    @Query(value = "SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.userCameras uc LEFT JOIN FETCH uc.camera WHERE u.approved = true ORDER BY u.role ASC, u.email ASC",
            countQuery = "SELECT COUNT(u) FROM User u WHERE u.approved = true")
     Page<User> findApprovedUsersPaged(Pageable pageable);
 
