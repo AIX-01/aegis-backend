@@ -104,6 +104,237 @@ src/main/java/com/aegis/aegisbackend/
         └── TempClipCleanupScheduler.java
 ```
 
+---
+
+## 핵심 워크플로우
+
+### 시스템 아키텍처 다이어그램
+
+```mermaid
+graph TD
+    subgraph Client["클라이언트"]
+        Browser[브라우저]
+    end
+
+    subgraph Backend["Spring Boot Backend"]
+        Auth[AuthController]
+        Camera[CameraController]
+        Event[EventController]
+        Notif[NotificationController]
+        Stats[StatsController]
+        User[UserController]
+        
+        AgentWH[AgentWebhookController]
+        MTXSync[MediaMTXSyncService]
+        MTXAuth[MediaMTXWebhookController]
+        
+        SSE[SseEmitterService]
+        S3[S3Service]
+        Redis[RedisTokenService]
+    end
+
+    subgraph External["외부 시스템"]
+        PG[(PostgreSQL)]
+        RD[(Redis)]
+        MinIO[(MinIO/S3)]
+        MTX[MediaMTX]
+        Agent[AI Agent]
+    end
+
+    Browser --> Auth
+    Browser --> Camera
+    Browser --> Event
+    Browser --> Notif
+    Browser --> Stats
+    Browser --> User
+    
+    Auth --> PG
+    Auth --> Redis
+    Auth --> RD
+    
+    Camera --> PG
+    Camera --> MTXSync
+    Camera --> RD
+    
+    Event --> PG
+    Event --> S3
+    Event --> MinIO
+    
+    SSE --> Browser
+    
+    Agent --> AgentWH
+    AgentWH --> PG
+    AgentWH --> S3
+    AgentWH --> SSE
+    
+    MTX --> MTXSync
+    MTX --> MTXAuth
+    MTXSync --> PG
+    MTXSync --> RD
+```
+
+### 1. 카메라 동기화 흐름
+
+```
+1. MediaMTX에서 스트림 시작/종료 시 runOnReady/runOnNotReady 훅 실행
+2. MediaMTX → POST /internal/mediamtx/sync 호출
+3. MediaMTXSyncService:
+   - GET /v3/paths/list로 MediaMTX API에서 스트림 목록 조회
+   - DB의 카메라 목록과 비교
+   - 새 스트림: INSERT (connected=true, enabled=false)
+   - 기존 스트림: UPDATE connected 상태
+   - 사라진 스트림: UPDATE connected=false
+4. analysisEnabled=true인 카메라 목록을 Redis에 저장 (analysis:cameras)
+5. Redis Pub/Sub으로 "camera:analysis:update" 채널에 "sync" 발행
+6. SSE로 프론트엔드에 "camera" 이벤트 브로드캐스트
+```
+
+### 2. AI Agent 이벤트 생성 흐름
+
+```
+1. AI Agent → POST /internal/agent/events (1차 분석 결과)
+   - Request: { cameraId, risk, type, occurredAt }
+   - 이벤트 생성 (status=PROCESSING)
+   - 알림 생성 (NotificationService.createEventNotifications)
+   - SSE 브로드캐스트 (event)
+   - Response: { eventId }
+
+2. AI Agent → GET /internal/agent/events/{id}/clip/upload-url
+   - S3 presigned PUT URL 생성 (temp/clips/{eventId}.mp4)
+   - Response: { uploadUrl }
+
+3. AI Agent → presigned URL로 직접 S3 업로드
+
+4. AI Agent → POST /internal/agent/events/{id}/clip/confirm
+   - S3에서 클립 존재 확인
+   - Event.clipUrl = "clips/{eventId}.mp4" 저장
+   - SSE 브로드캐스트 (event)
+
+5. AI Agent → PATCH /internal/agent/events/{id}/analysis (2차 분석 결과)
+   - Request: { risk, type, summary, riskScore }
+   - Event 업데이트 (status=ANALYZED)
+   - 분석 완료 알림 생성
+   - SSE 브로드캐스트 (event)
+```
+
+### 3. WebRTC 스트림 인증 흐름
+
+```
+1. 브라우저 → POST /stream/{camera}/whep (via Caddy)
+   - Authorization: Basic base64("_:" + accessToken)
+
+2. MediaMTX → POST /internal/mediamtx/auth (인증 위임)
+   - Request: { user, password, action, path, protocol, ip }
+
+3. MediaMTXWebhookController:
+   - protocol별 분기:
+     - SRT publish: ID/PW 검증
+     - WebRTC read: password 필드의 JWT 검증 + 카메라 권한 확인
+     - RTSP/HLS read: 인증 없음 (내부망)
+   - 성공: 200 OK
+   - 실패: 401 Unauthorized
+
+4. 인증 성공 시 브라우저 ↔ MediaMTX WebRTC 연결 수립
+```
+
+### 4. 인증/토큰 관리 흐름
+
+```
+1. 로그인 (POST /api/auth/login):
+   - 이메일/비밀번호 검증
+   - Access Token 생성 (15분)
+   - Refresh Token 생성 (7일)
+   - Redis에 Refresh Token 저장 (key: refresh_token:{token}, value: userId)
+   - Cookie에 Refresh Token 설정 (HttpOnly, Secure)
+   - Response: { accessToken, user }
+
+2. API 요청:
+   - Authorization: Bearer {accessToken}
+   - JwtAuthenticationFilter에서 JWT 검증
+   - SecurityContext에 인증 정보 설정
+
+3. 토큰 갱신 (POST /api/auth/refresh):
+   - Cookie에서 Refresh Token 추출
+   - Redis에서 userId 조회
+   - 새 Access Token 발급
+   - Response: { accessToken }
+
+4. 로그아웃 (POST /api/auth/logout):
+   - Redis에서 Refresh Token 삭제
+   - Cookie 삭제
+```
+
+### 5. SSE 알림 시스템
+
+```
+1. 클라이언트 연결 (GET /api/notifications/stream):
+   - SseEmitter 생성 (타임아웃: 30분)
+   - 사용자별 Map에 저장
+   - "connect" 이벤트 전송
+
+2. 이벤트 발생 시:
+   - NotificationService: DB에 알림 저장
+   - SseEmitterService.broadcast*(): 모든 연결된 클라이언트에 전송
+
+3. 이벤트 타입:
+   - notification: 새 알림 (토스트 표시)
+   - camera: 카메라 상태 변경
+   - event: 이벤트 생성/수정
+   - event-deleted: 이벤트 삭제
+   - member: 멤버 변경
+
+4. 연결 종료/오류 시:
+   - Map에서 Emitter 제거
+   - 클라이언트 재연결 필요
+```
+
+---
+
+## 핵심 서비스 상세
+
+### AuthService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `signup()` | 회원가입 | approved=false로 생성, 관리자 승인 필요 |
+| `login()` | 로그인 | approved/deleted 검증, Refresh Token Redis 저장 |
+| `logout()` | 로그아웃 | Redis에서 Refresh Token 삭제 |
+| `refresh()` | 토큰 갱신 | Cookie의 Refresh Token으로 Access Token 재발급 |
+| `changePassword()` | 비밀번호 변경 | 현재 비밀번호 확인 후 변경 |
+| `deleteAccount()` | 회원 탈퇴 | 소프트 삭제 (deleted=true, deletedAt 기록) |
+
+### CameraService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `getCamerasPaged()` | 카메라 목록 | 권한별 필터링, 정렬: connected→enabled→location |
+| `updateCamera()` | 카메라 수정 | location, enabled, analysisEnabled 수정 가능 |
+| `syncAnalysisCamerasToRedis()` | Redis 동기화 | analysisEnabled=true 카메라를 Redis에 저장 |
+
+### EventService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `getEventsPaged()` | 이벤트 목록 | 권한별 필터링 (Admin: 전체, User: 할당 카메라만) |
+| `deleteEvent()` | 이벤트 삭제 | S3 클립 삭제 → 알림 삭제 → 이벤트 삭제 → SSE 브로드캐스트 |
+
+### MediaMTXSyncService
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `syncCameras()` | 카메라 동기화 | Redis Lock으로 중복 실행 방지 (1초 TTL) |
+
+### S3Service
+
+| 메서드 | 기능 | 특이사항 |
+|--------|------|----------|
+| `generateUploadUrl()` | 업로드 URL 생성 | temp/clips/{eventId}.mp4, 15분 만료 |
+| `clipExists()` | 클립 존재 확인 | clips/{eventId}.mp4 확인 |
+| `getClipStream()` | 클립 스트리밍 | Range 헤더 지원 |
+| `deleteClip()` | 클립 삭제 | 이벤트 삭제 시 호출 |
+
+---
+
 ## 설치 및 실행
 
 ```bash
