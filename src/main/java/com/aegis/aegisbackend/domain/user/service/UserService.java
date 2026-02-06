@@ -37,7 +37,7 @@ public class UserService {
 
 
     /**
-     * 승인된 사용자 목록 조회 (페이지네이션, 관리자→일반 순, 이메일순 정렬)
+     * 승인된 사용자 목록 조회 (페이지네이션, 최신 가입순 정렬)
      */
     @Transactional(readOnly = true)
     public PageResponse<UserDto> getApprovedUsersPaged(int page, int size) {
