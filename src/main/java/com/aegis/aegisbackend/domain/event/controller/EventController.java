@@ -49,7 +49,7 @@ public class EventController {
             @RequestParam(required = false) List<String> risks,
             @RequestParam(required = false) List<String> types,
             @RequestParam(required = false) List<String> statuses,
-            @RequestParam(required = false) List<UUID> cameraIds,
+            @RequestParam(required = false) List<String> cameraIds,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
         UUID userId = UUID.fromString(userDetails.getUsername());

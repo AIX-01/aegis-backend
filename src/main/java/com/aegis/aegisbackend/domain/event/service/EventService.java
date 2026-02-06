@@ -13,6 +13,7 @@ import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
+import com.aegis.aegisbackend.domain.event.repository.EventSpecification;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
 import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.infra.s3.S3Service;
@@ -91,7 +92,7 @@ public class EventService {
             List<String> risks,
             List<String> types,
             List<String> statuses,
-            List<UUID> cameraIds,
+            List<String> cameraIds,
             LocalDateTime startDate,
             LocalDateTime endDate,
             int page,
@@ -102,7 +103,15 @@ public class EventService {
 
         Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
 
-        // 문자열을 Enum으로 변환 (null이면 null 유지)
+        // _empty 마커가 있으면 결과 없음 반환 (전체 해제)
+        if ((risks != null && risks.contains("_empty")) ||
+            (types != null && types.contains("_empty")) ||
+            (statuses != null && statuses.contains("_empty")) ||
+            (cameraIds != null && cameraIds.contains("_empty"))) {
+            return PageResponse.empty(pageable);
+        }
+
+        // 문자열을 Enum으로 변환
         List<EventRisk> riskEnums = risks != null && !risks.isEmpty()
                 ? risks.stream().map(r -> EventRisk.valueOf(r.toUpperCase())).toList()
                 : null;
@@ -113,16 +122,20 @@ public class EventService {
                 ? statuses.stream().map(s -> EventStatus.valueOf(s.toUpperCase())).toList()
                 : null;
 
-        Page<Event> eventPage;
-
-        if (user.getRole() == UserRole.ADMIN) {
-            eventPage = eventRepository.findAllWithFilters(
-                    riskEnums, typeEnums, statusEnums, cameraIds, startDate, endDate, pageable);
-        } else {
-            List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
-            eventPage = eventRepository.findByAssignedCamerasWithFilters(
-                    assignedCameraIds, riskEnums, typeEnums, statusEnums, cameraIds, startDate, endDate, pageable);
+        // 일반 사용자는 할당된 카메라만 조회 가능
+        List<UUID> assignedCameraIds = null;
+        if (user.getRole() != UserRole.ADMIN) {
+            assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
         }
+
+        // 카메라 ID를 UUID로 변환
+        List<UUID> filterCameraIds = cameraIds != null && !cameraIds.isEmpty()
+                ? cameraIds.stream().map(UUID::fromString).toList()
+                : null;
+
+        Page<Event> eventPage = eventRepository.findAll(
+                EventSpecification.withFilters(riskEnums, typeEnums, statusEnums, filterCameraIds, startDate, endDate, assignedCameraIds),
+                pageable);
 
         return PageResponse.from(eventPage, EventDto::from);
     }
