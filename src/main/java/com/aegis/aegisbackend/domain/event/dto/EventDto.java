@@ -33,7 +33,7 @@ public class EventDto {
         return EventDto.builder()
                 .id(event.getId().toString())
                 .cameraId(event.getCamera().getId().toString())
-                .cameraName(event.getCamera().getName())
+                .cameraName(event.getCamera().getLocation())
                 .risk(event.getRisk().getValue())
                 .type(event.getType().getValue())
                 .occurredAt(event.getOccurredAt().toString())
