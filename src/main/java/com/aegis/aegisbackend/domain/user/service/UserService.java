@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,11 +41,7 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public PageResponse<UserDto> getApprovedUsersPaged(int page, int size) {
-        Pageable pageable = PageRequest.of(
-            page,
-            size > 0 ? size : DEFAULT_PAGE_SIZE,
-            Sort.by(Sort.Order.asc("role"), Sort.Order.asc("email"))
-        );
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
         Page<User> userPage = userRepository.findApprovedUsersPaged(pageable);
         return PageResponse.from(userPage, this::toUserDto);
     }
@@ -56,11 +51,7 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public PageResponse<UserDto> getPendingUsersPaged(int page, int size) {
-        Pageable pageable = PageRequest.of(
-            page,
-            size > 0 ? size : DEFAULT_PAGE_SIZE,
-            Sort.by(Sort.Order.desc("createdAt"))
-        );
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
         Page<User> userPage = userRepository.findPendingUsersPaged(pageable);
         return PageResponse.from(userPage, this::toUserDto);
     }
