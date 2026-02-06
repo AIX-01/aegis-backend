@@ -43,46 +43,6 @@ public class EventService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
-    @Transactional(readOnly = true)
-    public List<EventDto> getAllEvents(UUID userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        List<Event> events;
-
-        if (user.getRole() == UserRole.ADMIN) {
-            events = eventRepository.findAllWithCamera();
-        } else {
-            List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
-            events = eventRepository.findByCameraIdInWithCamera(assignedCameraIds);
-        }
-
-        return events.stream()
-                .map(EventDto::from)
-                .toList();
-    }
-
-    /**
-     * 이벤트 목록 조회 (페이지네이션)
-     */
-    @Transactional(readOnly = true)
-    public PageResponse<EventDto> getEventsPaged(UUID userId, int page, int size) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
-        Page<Event> eventPage;
-
-        if (user.getRole() == UserRole.ADMIN) {
-            eventPage = eventRepository.findAllWithCameraPaged(pageable);
-        } else {
-            List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
-            eventPage = eventRepository.findByCameraIdInWithCameraPaged(assignedCameraIds, pageable);
-        }
-
-        return PageResponse.from(eventPage, EventDto::from);
-    }
-
     /**
      * 이벤트 목록 조회 (필터링 + 페이지네이션)
      */
