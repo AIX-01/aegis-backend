@@ -619,7 +619,7 @@ src/main/java/com/aegis/aegisbackend/
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/` | 승인된 사용자 목록 (관리자→일반순, 이메일순) |
+| GET | `/` | 승인된 사용자 목록 (최신 가입순) |
 | GET | `/pending` | 미승인 사용자 목록 (최신 가입순) |
 | GET | `/pending/count` | 미승인 사용자 수 |
 | GET | `/{id}` | 사용자 상세 |
@@ -629,7 +629,7 @@ src/main/java/com/aegis/aegisbackend/
 
 #### GET /api/users
 
-승인된 사용자 목록 조회 (관리자 먼저, 이메일순 정렬)
+승인된 사용자 목록 조회 (최신 가입순 정렬)
 
 **Response:** `200 OK` (PageResponse)
 ```json
