@@ -6,6 +6,9 @@ import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.dto.PageResponse;
+import com.aegis.aegisbackend.global.common.enums.EventRisk;
+import com.aegis.aegisbackend.global.common.enums.EventStatus;
+import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
@@ -21,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -73,6 +77,51 @@ public class EventService {
         } else {
             List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
             eventPage = eventRepository.findByCameraIdInWithCameraPaged(assignedCameraIds, pageable);
+        }
+
+        return PageResponse.from(eventPage, EventDto::from);
+    }
+
+    /**
+     * 이벤트 목록 조회 (필터링 + 페이지네이션)
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<EventDto> getEventsFiltered(
+            UUID userId,
+            List<String> risks,
+            List<String> types,
+            List<String> statuses,
+            List<UUID> cameraIds,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            int page,
+            int size) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Pageable pageable = PageRequest.of(page, size > 0 ? size : DEFAULT_PAGE_SIZE);
+
+        // 문자열을 Enum으로 변환 (null이면 null 유지)
+        List<EventRisk> riskEnums = risks != null && !risks.isEmpty()
+                ? risks.stream().map(r -> EventRisk.valueOf(r.toUpperCase())).toList()
+                : null;
+        List<EventType> typeEnums = types != null && !types.isEmpty()
+                ? types.stream().map(t -> EventType.valueOf(t.toUpperCase())).toList()
+                : null;
+        List<EventStatus> statusEnums = statuses != null && !statuses.isEmpty()
+                ? statuses.stream().map(s -> EventStatus.valueOf(s.toUpperCase())).toList()
+                : null;
+
+        Page<Event> eventPage;
+
+        if (user.getRole() == UserRole.ADMIN) {
+            eventPage = eventRepository.findAllWithFilters(
+                    riskEnums, typeEnums, statusEnums, cameraIds, startDate, endDate, pageable);
+        } else {
+            List<UUID> assignedCameraIds = userCameraRepository.findCameraIdsByUserId(userId);
+            eventPage = eventRepository.findByAssignedCamerasWithFilters(
+                    assignedCameraIds, riskEnums, typeEnums, statusEnums, cameraIds, startDate, endDate, pageable);
         }
 
         return PageResponse.from(eventPage, EventDto::from);

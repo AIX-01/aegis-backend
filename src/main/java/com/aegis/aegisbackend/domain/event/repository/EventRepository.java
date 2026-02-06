@@ -1,9 +1,13 @@
 package com.aegis.aegisbackend.domain.event.repository;
 
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.global.common.enums.EventRisk;
+import com.aegis.aegisbackend.global.common.enums.EventStatus;
+import com.aegis.aegisbackend.global.common.enums.EventType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -13,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Repository
-public interface EventRepository extends JpaRepository<Event, UUID> {
+public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecificationExecutor<Event> {
 
     @Query("SELECT e FROM Event e JOIN FETCH e.camera ORDER BY e.occurredAt DESC")
     List<Event> findAllWithCamera();
@@ -29,6 +33,59 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     @Query(value = "SELECT e FROM Event e JOIN FETCH e.camera WHERE e.camera.id IN :cameraIds ORDER BY e.occurredAt DESC",
            countQuery = "SELECT COUNT(e) FROM Event e WHERE e.camera.id IN :cameraIds")
     Page<Event> findByCameraIdInWithCameraPaged(@Param("cameraIds") List<UUID> cameraIds, Pageable pageable);
+
+    // 필터링 지원 (Admin용)
+    @Query(value = "SELECT e FROM Event e JOIN FETCH e.camera WHERE " +
+           "(:risks IS NULL OR e.risk IN :risks) AND " +
+           "(:types IS NULL OR e.type IN :types) AND " +
+           "(:statuses IS NULL OR e.status IN :statuses) AND " +
+           "(:cameraIds IS NULL OR e.camera.id IN :cameraIds) AND " +
+           "(:startDate IS NULL OR e.occurredAt >= :startDate) AND " +
+           "(:endDate IS NULL OR e.occurredAt <= :endDate) " +
+           "ORDER BY e.occurredAt DESC",
+           countQuery = "SELECT COUNT(e) FROM Event e WHERE " +
+           "(:risks IS NULL OR e.risk IN :risks) AND " +
+           "(:types IS NULL OR e.type IN :types) AND " +
+           "(:statuses IS NULL OR e.status IN :statuses) AND " +
+           "(:cameraIds IS NULL OR e.camera.id IN :cameraIds) AND " +
+           "(:startDate IS NULL OR e.occurredAt >= :startDate) AND " +
+           "(:endDate IS NULL OR e.occurredAt <= :endDate)")
+    Page<Event> findAllWithFilters(
+            @Param("risks") List<EventRisk> risks,
+            @Param("types") List<EventType> types,
+            @Param("statuses") List<EventStatus> statuses,
+            @Param("cameraIds") List<UUID> cameraIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            Pageable pageable);
+
+    // 필터링 지원 (일반 사용자용 - 할당된 카메라만)
+    @Query(value = "SELECT e FROM Event e JOIN FETCH e.camera WHERE " +
+           "e.camera.id IN :assignedCameraIds AND " +
+           "(:risks IS NULL OR e.risk IN :risks) AND " +
+           "(:types IS NULL OR e.type IN :types) AND " +
+           "(:statuses IS NULL OR e.status IN :statuses) AND " +
+           "(:cameraIds IS NULL OR e.camera.id IN :cameraIds) AND " +
+           "(:startDate IS NULL OR e.occurredAt >= :startDate) AND " +
+           "(:endDate IS NULL OR e.occurredAt <= :endDate) " +
+           "ORDER BY e.occurredAt DESC",
+           countQuery = "SELECT COUNT(e) FROM Event e WHERE " +
+           "e.camera.id IN :assignedCameraIds AND " +
+           "(:risks IS NULL OR e.risk IN :risks) AND " +
+           "(:types IS NULL OR e.type IN :types) AND " +
+           "(:statuses IS NULL OR e.status IN :statuses) AND " +
+           "(:cameraIds IS NULL OR e.camera.id IN :cameraIds) AND " +
+           "(:startDate IS NULL OR e.occurredAt >= :startDate) AND " +
+           "(:endDate IS NULL OR e.occurredAt <= :endDate)")
+    Page<Event> findByAssignedCamerasWithFilters(
+            @Param("assignedCameraIds") List<UUID> assignedCameraIds,
+            @Param("risks") List<EventRisk> risks,
+            @Param("types") List<EventType> types,
+            @Param("statuses") List<EventStatus> statuses,
+            @Param("cameraIds") List<UUID> cameraIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            Pageable pageable);
 
     @Query("SELECT e.type, COUNT(e) FROM Event e GROUP BY e.type")
     List<Object[]> countByEventType();
