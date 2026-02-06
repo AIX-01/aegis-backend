@@ -44,6 +44,7 @@ src/main/java/com/aegis/aegisbackend/
 │   │   ├── entity/EventAction.java     # 이벤트 액션 로그
 │   │   ├── repository/EventRepository.java
 │   │   ├── repository/EventActionRepository.java
+│   │   ├── repository/EventSpecification.java  # 동적 필터링 쿼리
 │   │   └── service/EventService.java
 │   ├── notification/               # 알림
 │   │   ├── controller/NotificationController.java
@@ -1132,7 +1133,6 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 | 파일 | 문제 | 상세 |
 |------|------|------|
-| `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
 | `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
 | `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 
