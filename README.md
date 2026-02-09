@@ -44,6 +44,7 @@ src/main/java/com/aegis/aegisbackend/
 │   │   ├── entity/EventAction.java     # 이벤트 액션 로그
 │   │   ├── repository/EventRepository.java
 │   │   ├── repository/EventActionRepository.java
+│   │   ├── repository/EventSpecification.java  # 동적 필터링 쿼리
 │   │   └── service/EventService.java
 │   ├── notification/               # 알림
 │   │   ├── controller/NotificationController.java
@@ -488,6 +489,20 @@ src/main/java/com/aegis/aegisbackend/
 
 #### GET /api/events
 
+**Query Parameters:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| `page` | int | 페이지 번호 (기본: 0) |
+| `size` | int | 페이지 크기 (기본: 20) |
+| `risks` | string[] | 위험도 필터 (suspicious, abnormal) |
+| `types` | string[] | 이상행동 유형 (assault, burglary, dump, swoon, vandalism) |
+| `statuses` | string[] | 분석 상태 (processing, analyzed) |
+| `cameraIds` | string[] | 카메라 ID 목록 |
+| `startDate` | datetime | 시작 날짜 (ISO 8601) |
+| `endDate` | datetime | 종료 날짜 (ISO 8601) |
+
+> `_empty` 마커를 전송하면 해당 필터에서 결과 없음 반환 (전체 해제)
+
 **Response:** `200 OK` (PageResponse)
 ```json
 {
@@ -495,7 +510,8 @@ src/main/java/com/aegis/aegisbackend/
     {
       "id": "UUID",
       "cameraId": "UUID",
-      "cameraName": "장소명",
+      "cameraName": "카메라명",
+      "cameraLocation": "설치 장소",
       "risk": "normal | suspicious | abnormal",
       "type": "assault | burglary | dump | swoon | vandalism",
       "occurredAt": "2026-01-31T12:00:00",
@@ -603,7 +619,7 @@ src/main/java/com/aegis/aegisbackend/
 
 | Method | Path | 설명 |
 |--------|------|------|
-| GET | `/` | 승인된 사용자 목록 (관리자→일반순, 이메일순) |
+| GET | `/` | 승인된 사용자 목록 (최신 가입순) |
 | GET | `/pending` | 미승인 사용자 목록 (최신 가입순) |
 | GET | `/pending/count` | 미승인 사용자 수 |
 | GET | `/{id}` | 사용자 상세 |
@@ -613,7 +629,7 @@ src/main/java/com/aegis/aegisbackend/
 
 #### GET /api/users
 
-승인된 사용자 목록 조회 (관리자 먼저, 이메일순 정렬)
+승인된 사용자 목록 조회 (최신 가입순 정렬)
 
 **Response:** `200 OK` (PageResponse)
 ```json
@@ -1117,7 +1133,6 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 | 파일 | 문제 | 상세 |
 |------|------|------|
-| `EventService.java` | `getAllEvents()` 미사용 | 페이지네이션 버전 `getEventsPaged()`만 사용 중 |
 | `S3Service.java` | `tempClipExists()` 미사용 | temp/clips 경로 확인 메서드, 호출처 없음 |
 | `S3Service.java` | `moveClipFromTemp()` 미사용 | temp → clips 이동 메서드, 호출처 없음 |
 

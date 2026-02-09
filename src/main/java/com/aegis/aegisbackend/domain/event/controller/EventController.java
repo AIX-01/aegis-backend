@@ -9,6 +9,7 @@ import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -18,6 +19,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,15 +39,22 @@ public class EventController {
     private final S3Service s3Service;
 
     /**
-     * 이벤트 목록 조회 (페이지네이션)
+     * 이벤트 목록 조회 (필터링 + 페이지네이션)
      */
     @GetMapping
     public ResponseEntity<?> getEvents(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) List<String> risks,
+            @RequestParam(required = false) List<String> types,
+            @RequestParam(required = false) List<String> statuses,
+            @RequestParam(required = false) List<String> cameraIds,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
         UUID userId = UUID.fromString(userDetails.getUsername());
-        PageResponse<EventDto> events = eventService.getEventsPaged(userId, page, size);
+        PageResponse<EventDto> events = eventService.getEventsFiltered(
+                userId, risks, types, statuses, cameraIds, startDate, endDate, page, size);
         return ResponseEntity.ok(events);
     }
 
