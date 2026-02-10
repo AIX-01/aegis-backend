@@ -30,6 +30,8 @@ public class RedisTokenService {
     private static final String SYNC_LOCK_KEY = "mediamtx:sync:lock";
     private static final String ANALYSIS_CAMERAS_KEY = "analysis:cameras";
     private static final String CAMERA_ANALYSIS_CHANNEL = "camera:analysis:update";
+    private static final String ACTIONS_KEY = "aegis:actions";
+    private static final String ACTION_UPDATE_CHANNEL = "aegis:action:update";
 
     // === Refresh Token ===
 
@@ -83,5 +85,17 @@ public class RedisTokenService {
     public void publishCameraAnalysisUpdate() {
         redisTemplate.convertAndSend(CAMERA_ANALYSIS_CHANNEL, "sync");
         log.info("카메라 분석 상태 변경 알림 발행: channel={}", CAMERA_ANALYSIS_CHANNEL);
+    }
+
+    // === Action 동기화 ===
+
+    /**
+     * enabled=true인 액션 목록 저장 및 Pub/Sub 알림 발행
+     * @param actions 직렬화된 액션 목록 JSON
+     */
+    public void saveActionsAndNotify(String actionsJson) {
+        redisTemplate.opsForValue().set(ACTIONS_KEY, actionsJson);
+        redisTemplate.convertAndSend(ACTION_UPDATE_CHANNEL, "reload");
+        log.info("액션 목록 저장 및 알림 발행: channel={}", ACTION_UPDATE_CHANNEL);
     }
 }

@@ -33,6 +33,12 @@ public enum ErrorCode {
     // Event
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "이벤트를 찾을 수 없습니다."),
 
+    // Action
+    ACTION_NOT_FOUND(HttpStatus.NOT_FOUND, "액션을 찾을 수 없습니다."),
+
+    // Manual
+    MANUAL_NOT_FOUND(HttpStatus.NOT_FOUND, "매뉴얼을 찾을 수 없습니다."),
+
 
     // S3/Storage
     S3_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3 업로드에 실패했습니다."),

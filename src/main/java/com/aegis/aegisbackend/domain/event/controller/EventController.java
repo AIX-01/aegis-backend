@@ -119,4 +119,15 @@ public class EventController {
         String presignedUrl = s3Service.generateDownloadUrl(id);
         return ResponseEntity.ok(Map.of("url", presignedUrl, "filename", "event_" + id + ".mp4"));
     }
+
+    /**
+     * Tool 실행 결과 기록 (Python Agent에서 호출)
+     */
+    @PostMapping("/{id}/actions")
+    public ResponseEntity<Map<String, Object>> recordEventAction(
+            @PathVariable UUID id,
+            @RequestBody com.aegis.aegisbackend.domain.event.dto.EventActionRequest request) {
+        eventService.recordEventAction(id, request);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
 }
