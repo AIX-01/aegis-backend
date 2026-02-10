@@ -269,6 +269,7 @@ src/main/java/com/aegis/aegisbackend/
 |--------|------|----------|
 | `getEventsPaged()` | 이벤트 목록 | 권한별 필터링 (Admin: 전체, User: 할당 카메라만) |
 | `deleteEvent()` | 이벤트 삭제 | S3 클립 삭제 → 알림 삭제 → 이벤트 삭제 → SSE 브로드캐스트 |
+| `recordEventAction()` | 액션 실행 기록 | Python Agent에서 Tool 실행 결과 기록 시 호출 |
 
 ### MediaMTXSyncService
 
