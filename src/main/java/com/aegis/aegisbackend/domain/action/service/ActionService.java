@@ -179,22 +179,22 @@ public class ActionService {
                 .name("메일 발송")
                 .description("이메일 알림 발송")
                 .parameters(Map.of(
-                        "to_email", Map.of("type", "str", "description", "수신자 이메일", "default_value", (Object) null),
-                        "subject", Map.of("type", "str", "description", "메일 제목", "default_value", (Object) null),
-                        "body", Map.of("type", "str", "description", "메일 본문", "default_value", (Object) null)
+                        "to_email", Map.of("type", "str", "description", "수신자 이메일", "default_value", ""),
+                        "subject", Map.of("type", "str", "description", "메일 제목", "default_value", ""),
+                        "body", Map.of("type", "str", "description", "메일 본문", "default_value", "")
                 ))
                 .code("""
-import smtplib
-from email.mime.text import MIMEText
-
-def execute(to_email: str, subject: str, body: str) -> str:
-    # SMTP 설정 필요
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['To'] = to_email
-    # 실제 발송 로직 구현 필요
-    return f"메일 발송 완료: {to_email}"
-""")
+                        import smtplib
+                        from email.mime.text import MIMEText
+                        
+                        def execute(to_email: str, subject: str, body: str) -> str:
+                            # SMTP 설정 필요
+                            msg = MIMEText(body)
+                            msg['Subject'] = subject
+                            msg['To'] = to_email
+                            # 실제 발송 로직 구현 필요
+                            return f"메일 발송 완료: {to_email}"
+                        """)
                 .enabled(false)
                 .build());
 
@@ -203,14 +203,14 @@ def execute(to_email: str, subject: str, body: str) -> str:
                 .name("문자 발송")
                 .description("SMS 알림 발송")
                 .parameters(Map.of(
-                        "phone_number", Map.of("type", "str", "description", "수신자 전화번호", "default_value", (Object) null),
-                        "message", Map.of("type", "str", "description", "메시지 내용", "default_value", (Object) null)
+                        "phone_number", Map.of("type", "str", "description", "수신자 전화번호", "default_value", ""),
+                        "message", Map.of("type", "str", "description", "메시지 내용", "default_value", "")
                 ))
                 .code("""
-def execute(phone_number: str, message: str) -> str:
-    # SMS API 연동 필요
-    return f"문자 발송 완료: {phone_number}"
-""")
+                        def execute(phone_number: str, message: str) -> str:
+                            # SMS API 연동 필요
+                            return f"문자 발송 완료: {phone_number}"
+                        """)
                 .enabled(false)
                 .build());
 
@@ -219,22 +219,22 @@ def execute(phone_number: str, message: str) -> str:
                 .name("웹훅 호출")
                 .description("외부 Webhook 호출")
                 .parameters(Map.of(
-                        "url", Map.of("type", "str", "description", "웹훅 URL", "default_value", (Object) null),
+                        "url", Map.of("type", "str", "description", "웹훅 URL", "default_value", ""),
                         "method", Map.of("type", "str", "description", "HTTP 메서드 (GET/POST)", "default_value", "POST"),
-                        "body", Map.of("type", "str", "description", "요청 본문 (JSON)", "default_value", (Object) null)
+                        "body", Map.of("type", "str", "description", "요청 본문 (JSON)", "default_value", "")
                 ))
                 .code("""
-import requests
-import json
-
-def execute(url: str, method: str, body: str) -> str:
-    headers = {"Content-Type": "application/json"}
-    if method.upper() == "GET":
-        response = requests.get(url, headers=headers)
-    else:
-        response = requests.post(url, headers=headers, data=body)
-    return f"웹훅 호출 완료: {response.status_code}"
-""")
+                        import requests
+                        import json
+                        
+                        def execute(url: str, method: str, body: str) -> str:
+                            headers = {"Content-Type": "application/json"}
+                            if method.upper() == "GET":
+                                response = requests.get(url, headers=headers)
+                            else:
+                                response = requests.post(url, headers=headers, data=body)
+                            return f"웹훅 호출 완료: {response.status_code}"
+                        """)
                 .enabled(false)
                 .build());
 
@@ -243,14 +243,14 @@ def execute(url: str, method: str, body: str) -> str:
                 .name("112 신고")
                 .description("경찰 신고")
                 .parameters(Map.of(
-                        "location", Map.of("type", "str", "description", "사건 발생 위치", "default_value", (Object) null),
-                        "description", Map.of("type", "str", "description", "상황 설명", "default_value", (Object) null)
+                        "location", Map.of("type", "str", "description", "사건 발생 위치", "default_value", ""),
+                        "description", Map.of("type", "str", "description", "상황 설명", "default_value", "")
                 ))
                 .code("""
-def execute(location: str, description: str) -> str:
-    # 112 신고 API 연동 필요
-    return f"112 신고 접수: {location}"
-""")
+                        def execute(location: str, description: str) -> str:
+                            # 112 신고 API 연동 필요
+                            return f"112 신고 접수: {location}"
+                        """)
                 .enabled(false)
                 .build());
 
@@ -259,14 +259,14 @@ def execute(location: str, description: str) -> str:
                 .name("119 신고")
                 .description("소방/응급 신고")
                 .parameters(Map.of(
-                        "location", Map.of("type", "str", "description", "사건 발생 위치", "default_value", (Object) null),
-                        "description", Map.of("type", "str", "description", "상황 설명", "default_value", (Object) null)
+                        "location", Map.of("type", "str", "description", "사건 발생 위치", "default_value", ""),
+                        "description", Map.of("type", "str", "description", "상황 설명", "default_value", "")
                 ))
                 .code("""
-def execute(location: str, description: str) -> str:
-    # 119 신고 API 연동 필요
-    return f"119 신고 접수: {location}"
-""")
+                        def execute(location: str, description: str) -> str:
+                            # 119 신고 API 연동 필요
+                            return f"119 신고 접수: {location}"
+                        """)
                 .enabled(false)
                 .build());
     }
