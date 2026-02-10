@@ -10,7 +10,7 @@ import java.util.UUID;
 @Repository
 public interface EventActionRepository extends JpaRepository<EventAction, UUID> {
 
-    List<EventAction> findByEventIdOrderByTriggeredAtDesc(UUID eventId);
+    List<EventAction> findByEventIdOrderByExecutedAtDesc(UUID eventId);
 
     void deleteByEventId(UUID eventId);
 }

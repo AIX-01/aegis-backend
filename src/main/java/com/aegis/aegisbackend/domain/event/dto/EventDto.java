@@ -57,14 +57,22 @@ public class EventDto {
     @AllArgsConstructor
     public static class ActionDto {
         private String id;
-        private String log;
-        private String triggeredAt;
+        private String actionId;
+        private String actionName;
+        private Object inputParams;
+        private String outputResult;
+        private Boolean success;
+        private String executedAt;
 
-        public static ActionDto from(EventAction action) {
+        public static ActionDto from(EventAction eventAction) {
             return ActionDto.builder()
-                    .id(action.getId().toString())
-                    .log(action.getLog())
-                    .triggeredAt(action.getTriggeredAt().toString())
+                    .id(eventAction.getId().toString())
+                    .actionId(eventAction.getAction().getId().toString())
+                    .actionName(eventAction.getAction().getName())
+                    .inputParams(eventAction.getInputParams())
+                    .outputResult(eventAction.getOutputResult())
+                    .success(eventAction.getSuccess())
+                    .executedAt(eventAction.getExecutedAt().toString())
                     .build();
         }
     }
