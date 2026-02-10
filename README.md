@@ -40,12 +40,27 @@ src/main/java/com/aegis/aegisbackend/
 │   ├── event/                      # 이벤트
 │   │   ├── controller/EventController.java
 │   │   ├── dto/EventDto.java
+│   │   ├── dto/EventActionRequest.java  # Tool 실행 결과 기록 요청
 │   │   ├── entity/Event.java
-│   │   ├── entity/EventAction.java     # 이벤트 액션 로그
+│   │   ├── entity/EventAction.java     # Tool 실행 기록
+│   │   ├── entity/EventManual.java     # 참조 매뉴얼 기록
 │   │   ├── repository/EventRepository.java
 │   │   ├── repository/EventActionRepository.java
+│   │   ├── repository/EventManualRepository.java
 │   │   ├── repository/EventSpecification.java  # 동적 필터링 쿼리
 │   │   └── service/EventService.java
+│   ├── action/                     # 액션 (AI Agent Tool)
+│   │   ├── controller/ActionController.java
+│   │   ├── dto/ActionDto.java
+│   │   ├── entity/Action.java
+│   │   ├── repository/ActionRepository.java
+│   │   └── service/ActionService.java
+│   ├── manual/                     # 매뉴얼 (RAG 검색용)
+│   │   ├── controller/ManualController.java
+│   │   ├── dto/ManualDto.java
+│   │   ├── entity/Manual.java
+│   │   ├── repository/ManualRepository.java
+│   │   └── service/ManualService.java
 │   ├── notification/               # 알림
 │   │   ├── controller/NotificationController.java
 │   │   ├── dto/NotificationDto.java
