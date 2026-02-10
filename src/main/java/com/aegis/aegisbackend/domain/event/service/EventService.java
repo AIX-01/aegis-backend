@@ -1,7 +1,12 @@
 package com.aegis.aegisbackend.domain.event.service;
 
+import com.aegis.aegisbackend.domain.action.entity.Action;
+import com.aegis.aegisbackend.domain.action.repository.ActionRepository;
+import com.aegis.aegisbackend.domain.event.dto.EventActionRequest;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.entity.EventAction;
+import com.aegis.aegisbackend.domain.event.repository.EventActionRepository;
 import com.aegis.aegisbackend.domain.user.entity.User;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
@@ -26,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +46,8 @@ public class EventService {
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
     private final S3Service s3Service;
+    private final ActionRepository actionRepository;
+    private final EventActionRepository eventActionRepository;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
 
@@ -135,5 +143,33 @@ public class EventService {
 
         // SSE 브로드캐스트
         sseEmitterService.broadcastEventDeleted(eventId.toString());
+    }
+
+    /**
+     * Tool 실행 결과 기록 (Python Agent에서 호출)
+     */
+    @Transactional
+    public void recordEventAction(UUID eventId, EventActionRequest request) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        Action action = actionRepository.findById(UUID.fromString(request.getActionId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACTION_NOT_FOUND));
+
+        // ISO 8601 형식의 시간 파싱
+        LocalDateTime executedAt = OffsetDateTime.parse(request.getExecutedAt()).toLocalDateTime();
+
+        EventAction eventAction = EventAction.builder()
+                .event(event)
+                .action(action)
+                .inputParams(request.getInputParams())
+                .outputResult(request.getOutputResult())
+                .success(request.getSuccess())
+                .executedAt(executedAt)
+                .build();
+
+        eventActionRepository.save(eventAction);
+        log.info("EventAction 기록 완료: eventId={}, actionId={}, success={}",
+                eventId, request.getActionId(), request.getSuccess());
     }
 }
