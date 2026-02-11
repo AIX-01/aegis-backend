@@ -1,5 +1,7 @@
 package com.aegis.aegisbackend.infra.agent.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -7,8 +9,13 @@ import lombok.Data;
  */
 @Data
 public class EventActionRequest {
-    private String userId;
+    @NotNull(message = "confirm은 필수입니다")
+    private Boolean confirm;
+
+    @NotBlank(message = "action은 필수입니다")
     private String action;
+
+    @NotBlank(message = "description은 필수입니다")
     private String description;
 }
 
