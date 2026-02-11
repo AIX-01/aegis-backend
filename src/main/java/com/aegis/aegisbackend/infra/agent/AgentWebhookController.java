@@ -2,9 +2,11 @@ package com.aegis.aegisbackend.infra.agent;
 
 import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
+import com.aegis.aegisbackend.domain.event.dto.EventActionRequest;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
+import com.aegis.aegisbackend.domain.event.service.EventService;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
 import com.aegis.aegisbackend.global.common.enums.EventRisk;
@@ -36,6 +38,7 @@ public class AgentWebhookController {
 
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
+    private final EventService eventService;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
     private final S3Service s3Service;
@@ -194,6 +197,30 @@ public class AgentWebhookController {
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("분석 결과 추가 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 액션 실행 결과 기록 (Agent에서 호출)
+     */
+    @PostMapping("/events/{eventId}/actions")
+    public ResponseEntity<?> recordEventAction(
+            @PathVariable UUID eventId,
+            @RequestBody EventActionRequest request) {
+        log.info("액션 실행 결과 기록 요청: eventId={}, actionId={}", eventId, request.getActionId());
+
+        try {
+            eventService.recordEventAction(eventId, request);
+            return ResponseEntity.ok(Map.of("success", true));
+
+        } catch (BusinessException e) {
+            log.error("액션 기록 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("액션 기록 실패: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
