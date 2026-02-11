@@ -155,8 +155,8 @@ src/main/java/com/aegis/aegisbackend/
    - SSE 브로드캐스트 (event)
 
 6. AI Agent → POST /internal/agent/events/{id}/actions (액션 기록)
-   - Request: { confirm, action, description }
-   - Human-in-the-Loop 승인/거절 여부 기록 (confirm: true/false)
+   - Request: { action, description }
+   - 액션 로그 저장
    - Response: { actionId }
 
 7. AI Agent → PATCH /internal/agent/events/{id}/actions/{actionId} (액션 수정)
@@ -918,13 +918,12 @@ clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 
 ##### POST /internal/agent/events/{id}/actions
 
-이벤트 액션 생성 (Human-in-the-Loop 승인/거절 기록)
+이벤트 액션 생성
 
 **Request:**
 
 ```json
 {
-  "confirm": "boolean (필수) - 승인 여부",
   "action": "string (필수) - 액션 종류",
   "description": "string (필수) - 액션 설명"
 }
