@@ -9,7 +9,6 @@ import lombok.Data;
 public class EventUpdateRequest {
     private String risk;
     private String type;
-    private String clipUrl;
     private String summary;
     private String report;
     private String status;
