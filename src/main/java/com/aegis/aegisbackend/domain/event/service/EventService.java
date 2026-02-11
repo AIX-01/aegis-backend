@@ -153,8 +153,17 @@ public class EventService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-        Action action = actionRepository.findById(UUID.fromString(request.getActionId()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.ACTION_NOT_FOUND));
+        // actionId가 null이거나 비어있으면 action 없이 기록 (search_manual 등 기본 도구)
+        Action action = null;
+        if (request.getActionId() != null && !request.getActionId().isEmpty()) {
+            try {
+                action = actionRepository.findById(UUID.fromString(request.getActionId()))
+                        .orElse(null);
+            } catch (IllegalArgumentException e) {
+                // UUID 형식이 아닌 경우 무시 (action_{id} 형식 등)
+                log.debug("actionId가 UUID 형식이 아님: {}", request.getActionId());
+            }
+        }
 
         // ISO 8601 형식의 시간 파싱
         LocalDateTime executedAt = OffsetDateTime.parse(request.getExecutedAt()).toLocalDateTime();
