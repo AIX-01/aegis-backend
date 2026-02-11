@@ -4,16 +4,21 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.entity.EventAction;
+import com.aegis.aegisbackend.domain.event.repository.EventActionRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
+import com.aegis.aegisbackend.domain.user.entity.User;
+import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.global.common.enums.EventRisk;
 import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
-import com.aegis.aegisbackend.infra.agent.dto.AnalysisResultRequest;
 import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventActionRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventUpdateRequest;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +41,8 @@ public class AgentWebhookController {
 
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
+    private final EventActionRepository eventActionRepository;
+    private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
     private final S3Service s3Service;
@@ -67,10 +74,7 @@ public class AgentWebhookController {
             Event savedEvent = eventRepository.save(event);
             log.info("이벤트 생성 완료: eventId={}", savedEvent.getId());
 
-            // 알림 생성
             notificationService.createEventNotifications(savedEvent);
-
-            // SSE 브로드캐스트
             sseEmitterService.broadcastEvent(EventDto.from(savedEvent));
 
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -88,6 +92,57 @@ public class AgentWebhookController {
     }
 
     /**
+     * 이벤트 수정
+     */
+    @PatchMapping("/events/{eventId}")
+    public ResponseEntity<?> updateEvent(
+            @PathVariable UUID eventId,
+            @RequestBody EventUpdateRequest request) {
+        log.info("이벤트 수정 요청: eventId={}", eventId);
+
+        try {
+            Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            if (request.getRisk() != null) {
+                event.setRisk(EventRisk.fromValue(request.getRisk()));
+            }
+            if (request.getType() != null) {
+                event.setType(EventType.fromValue(request.getType()));
+            }
+            if (request.getClipUrl() != null) {
+                event.setClipUrl(request.getClipUrl());
+            }
+            if (request.getSummary() != null) {
+                event.setSummary(request.getSummary());
+            }
+            if (request.getReport() != null) {
+                event.setReport(request.getReport());
+            }
+            if (request.getStatus() != null) {
+                event.setStatus(EventStatus.fromValue(request.getStatus()));
+            }
+
+            eventRepository.save(event);
+            log.info("이벤트 수정 완료: eventId={}", eventId);
+
+            notificationService.createAnalysisNotifications(event);
+            sseEmitterService.broadcastEvent(EventDto.from(event));
+
+            return ResponseEntity.ok(Map.of("eventId", eventId.toString()));
+
+        } catch (BusinessException e) {
+            log.error("이벤트 수정 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("이벤트 수정 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * 클립 업로드용 presigned URL 발급
      */
     @GetMapping("/events/{eventId}/clip/upload-url")
@@ -95,7 +150,6 @@ public class AgentWebhookController {
         log.info("클립 업로드 URL 요청: eventId={}", eventId);
 
         try {
-            // 이벤트 존재 확인
             eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
@@ -120,21 +174,17 @@ public class AgentWebhookController {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            // 클립 존재 확인
             if (!s3Service.clipExists(eventId)) {
                 log.warn("클립을 찾을 수 없음: eventId={}", eventId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "클립을 찾을 수 없습니다"));
             }
 
-            // clipUrl 저장 (presigned 없는 기본 경로)
             String clipUrl = "clips/" + eventId + ".mp4";
             event.setClipUrl(clipUrl);
             eventRepository.save(event);
 
             log.info("클립 확정 완료: eventId={}, clipUrl={}", eventId, clipUrl);
-
-            // SSE 브로드캐스트
             sseEmitterService.broadcastEvent(EventDto.from(event));
 
             return ResponseEntity.ok(Map.of("clipUrl", clipUrl));
@@ -151,49 +201,88 @@ public class AgentWebhookController {
     }
 
     /**
-     * 분석 결과 추가
+     * 이벤트 액션 생성
      */
-    @PatchMapping("/events/{eventId}/analysis")
-    public ResponseEntity<?> addAnalysisResult(
+    @PostMapping("/events/{eventId}/actions")
+    public ResponseEntity<?> createEventAction(
             @PathVariable UUID eventId,
-            @RequestBody AnalysisResultRequest request) {
-        log.info("분석 결과 추가 요청: eventId={}", eventId);
+            @RequestBody EventActionRequest request) {
+        log.info("이벤트 액션 생성 요청: eventId={}, action={}", eventId, request.getAction());
 
         try {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            if (request.getRisk() != null) {
-                event.setRisk(EventRisk.fromValue(request.getRisk()));
+            User user = null;
+            if (request.getUserId() != null && !request.getUserId().isEmpty()) {
+                user = userRepository.findById(UUID.fromString(request.getUserId()))
+                        .orElse(null);
             }
-            if (request.getType() != null) {
-                event.setType(EventType.fromValue(request.getType()));
-            }
-            if (request.getSummary() != null) {
-                event.setSummary(request.getSummary());
-            }
-            if (request.getRiskScore() != null) {
-                event.setRiskScore(request.getRiskScore());
-            }
-            event.setStatus(EventStatus.ANALYZED);
 
-            eventRepository.save(event);
-            log.info("분석 결과 추가 완료: eventId={}", eventId);
+            EventAction eventAction = EventAction.builder()
+                    .event(event)
+                    .user(user)
+                    .action(request.getAction())
+                    .description(request.getDescription())
+                    .build();
 
-            // 알림 생성
-            notificationService.createAnalysisNotifications(event);
+            EventAction savedAction = eventActionRepository.save(eventAction);
+            log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
 
-            // SSE 브로드캐스트
-            sseEmitterService.broadcastEvent(EventDto.from(event));
-
-            return ResponseEntity.ok(Map.of("eventId", eventId.toString()));
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("actionId", savedAction.getId().toString()));
 
         } catch (BusinessException e) {
-            log.error("분석 결과 추가 실패: {}", e.getMessage());
+            log.error("이벤트 액션 생성 실패: {}", e.getMessage());
             return ResponseEntity.status(e.getErrorCode().getStatus())
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("분석 결과 추가 실패: {}", e.getMessage(), e);
+            log.error("이벤트 액션 생성 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 이벤트 액션 수정
+     */
+    @PatchMapping("/events/{eventId}/actions/{actionId}")
+    public ResponseEntity<?> updateEventAction(
+            @PathVariable UUID eventId,
+            @PathVariable UUID actionId,
+            @RequestBody EventActionRequest request) {
+        log.info("이벤트 액션 수정 요청: eventId={}, actionId={}", eventId, actionId);
+
+        try {
+            eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            EventAction eventAction = eventActionRepository.findById(actionId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ACTION_NOT_FOUND));
+
+            if (request.getUserId() != null) {
+                User user = userRepository.findById(UUID.fromString(request.getUserId()))
+                        .orElse(null);
+                eventAction.setUser(user);
+            }
+            if (request.getAction() != null) {
+                eventAction.setAction(request.getAction());
+            }
+            if (request.getDescription() != null) {
+                eventAction.setDescription(request.getDescription());
+            }
+
+            eventActionRepository.save(eventAction);
+            log.info("이벤트 액션 수정 완료: actionId={}", actionId);
+
+            return ResponseEntity.ok(Map.of("actionId", actionId.toString()));
+
+        } catch (BusinessException e) {
+            log.error("이벤트 액션 수정 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("이벤트 액션 수정 실패: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }

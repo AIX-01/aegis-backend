@@ -32,6 +32,7 @@ public enum ErrorCode {
 
     // Event
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "이벤트를 찾을 수 없습니다."),
+    EVENT_ACTION_NOT_FOUND(HttpStatus.NOT_FOUND, "이벤트 액션을 찾을 수 없습니다."),
 
 
     // S3/Storage
