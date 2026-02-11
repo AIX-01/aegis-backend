@@ -93,8 +93,10 @@ src/main/java/com/aegis/aegisbackend/
     ├── agent/                      # AI Agent 연동
     │   ├── AgentWebhookController.java
     │   └── dto/
-    │       ├── AnalysisResultRequest.java
-    │       └── CreateEventRequest.java
+    │       ├── CreateEventRequest.java
+    │       ├── EventActionRequest.java
+    │       ├── EventActionUpdateRequest.java
+    │       └── EventUpdateRequest.java
     ├── mediamtx/                   # MediaMTX 연동
     │   ├── MediaMTXSyncService.java
     │   └── MediaMTXWebhookController.java
@@ -147,19 +149,19 @@ src/main/java/com/aegis/aegisbackend/
    - SSE 브로드캐스트 (event)
 
 5. AI Agent → PATCH /internal/agent/events/{id} (2차 분석 결과)
-   - Request: { risk, type, clipUrl, summary, report, status }
+   - Request: { risk, type, summary, report, status }
    - null이 아닌 필드만 업데이트
    - 분석 완료 알림 생성
    - SSE 브로드캐스트 (event)
 
 6. AI Agent → POST /internal/agent/events/{id}/actions (액션 기록)
-   - Request: { userId, action, description }
-   - Human-in-the-Loop 승인자 기록 (userId)
+   - Request: { confirm, action, description }
+   - Human-in-the-Loop 승인/거절 여부 기록 (confirm: true/false)
    - Response: { actionId }
 
 7. AI Agent → PATCH /internal/agent/events/{id}/actions/{actionId} (액션 수정)
-   - Request: { userId, action, description }
-   - null이 아닌 필드만 업데이트
+   - Request: { userId (선택), action, description }
+   - userId가 있으면 승인/거절 사용자 업데이트
    - Response: { actionId }
 ```
 
@@ -512,14 +514,14 @@ src/main/java/com/aegis/aegisbackend/
 
 ### Event API (`/api/events`)
 
-| Method | Path                | 설명                          |
-|--------|---------------------|-----------------------------|
-| GET    | `/`                 | 이벤트 목록 (페이지네이션, 기본 size=20) |
-| GET    | `/{id}`             | 이벤트 상세                      |
-| GET    | `/{id}/report`      | 보고서 HTML 조회                 |
-| DELETE | `/{id}`             | 이벤트 삭제 (Admin)              |
-| GET    | `/{id}/clip`        | 클립 다운로드                     |
-| GET    | `/{id}/clip/stream` | 클립 스트리밍                     |
+| Method | Path                   | 설명                          |
+|--------|------------------------|-----------------------------|
+| GET    | `/`                    | 이벤트 목록 (페이지네이션, 기본 size=20) |
+| GET    | `/{id}`                | 이벤트 상세                      |
+| GET    | `/{id}/report`         | 보고서 HTML 조회                 |
+| DELETE | `/{id}`                | 이벤트 삭제 (Admin)              |
+| GET    | `/{id}/clip-url`       | 클립 재생용 presigned URL        |
+| GET    | `/{id}/clip/download-url` | 클립 다운로드용 presigned URL   |
 
 #### GET /api/events
 
@@ -553,9 +555,7 @@ src/main/java/com/aegis/aegisbackend/
       "status": "processing | analyzed",
       "clipUrl": "S3 URL (nullable)",
       "summary": "AI 요약 (nullable)",
-      "riskScore": "위험 점수 (nullable)",
       "actions": "[{...}] (nullable)",
-      "ragReferences": "[{...}] (nullable)",
       "report": "상세 보고서 (nullable)"
     }
   ],
@@ -583,6 +583,35 @@ src/main/java/com/aegis/aegisbackend/
 ```
 
 **Error:** `404 Not Found` (보고서가 없는 경우)
+
+#### GET /api/events/{id}/clip-url
+
+클립 재생용 presigned URL 반환
+
+**Response:** `200 OK`
+
+```json
+{
+  "url": "https://... (presigned URL)"
+}
+```
+
+**Error:** `404 Not Found` (클립이 없는 경우)
+
+#### GET /api/events/{id}/clip/download-url
+
+클립 다운로드용 presigned URL 반환
+
+**Response:** `200 OK`
+
+```json
+{
+  "url": "https://... (presigned URL)",
+  "filename": "event_{id}.mp4"
+}
+```
+
+**Error:** `404 Not Found` (클립이 없는 경우)
 
 ### Notification API (`/api/notifications`)
 
@@ -807,11 +836,14 @@ src/main/java/com/aegis/aegisbackend/
 
 #### Agent Webhook (`/internal/agent`)
 
-| Method | Path                    | 설명                      |
-|--------|-------------------------|-------------------------|
-| POST   | `/events`               | 이벤트 생성                  |
-| POST   | `/events/{id}/clip`     | 클립 확정 (temp → clips 이동) |
-| PATCH  | `/events/{id}/analysis` | 분석 결과 추가                |
+| Method | Path                         | 설명             |
+|--------|------------------------------|----------------|
+| POST   | `/events`                    | 이벤트 생성         |
+| PATCH  | `/events/{id}`               | 이벤트 수정         |
+| GET    | `/events/{id}/clip/upload-url` | 클립 업로드 URL 발급 |
+| POST   | `/events/{id}/clip/confirm`  | 클립 업로드 완료 확인   |
+| POST   | `/events/{id}/actions`       | 이벤트 액션 생성      |
+| PATCH  | `/events/{id}/actions/{actionId}` | 이벤트 액션 수정 |
 
 ##### POST /internal/agent/events
 
@@ -848,7 +880,7 @@ clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 }
 ```
 
-##### PATCH /internal/agent/events/{id}/analysis
+##### PATCH /internal/agent/events/{id}
 
 **Request:**
 
@@ -857,7 +889,8 @@ clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
   "risk": "normal | suspicious | abnormal (선택)",
   "type": "assault | burglary | dump | swoon | vandalism (선택)",
   "summary": "string (선택)",
-  "riskScore": "string (선택)"
+  "report": "string (선택)",
+  "status": "processing | analyzed (선택)"
 }
 ```
 
@@ -866,6 +899,64 @@ clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 ```json
 {
   "eventId": "UUID"
+}
+```
+
+##### GET /internal/agent/events/{id}/clip/upload-url
+
+클립 업로드를 위한 S3 presigned URL 발급
+
+**Request:** Body 없음
+
+**Response:** `200 OK`
+
+```json
+{
+  "uploadUrl": "https://..."
+}
+```
+
+##### POST /internal/agent/events/{id}/actions
+
+이벤트 액션 생성 (Human-in-the-Loop 승인/거절 기록)
+
+**Request:**
+
+```json
+{
+  "confirm": "boolean (필수) - 승인 여부",
+  "action": "string (필수) - 액션 종류",
+  "description": "string (필수) - 액션 설명"
+}
+```
+
+**Response:** `201 Created`
+
+```json
+{
+  "actionId": "UUID"
+}
+```
+
+##### PATCH /internal/agent/events/{id}/actions/{actionId}
+
+이벤트 액션 수정
+
+**Request:**
+
+```json
+{
+  "userId": "UUID (선택) - 승인/거절한 사용자",
+  "action": "string (필수)",
+  "description": "string (필수)"
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "actionId": "UUID"
 }
 ```
 
@@ -907,6 +998,7 @@ MediaMTX에서 호출하는 인증 요청:
 erDiagram
     users ||--o{ user_cameras: has
     users ||--o{ notifications: receives
+    users ||--o{ event_actions: performs
     cameras ||--o{ user_cameras: assigned_to
     cameras ||--o{ events: generates
     events ||--o{ event_actions: has
@@ -961,9 +1053,11 @@ erDiagram
     event_actions {
         UUID id PK
         UUID event_id FK
-        TEXT log
-        TIMESTAMP triggered_at
+        UUID user_id FK
+        TEXT action
+        TEXT description
         TIMESTAMP created_at
+        TIMESTAMP updated_at
     }
 
     notifications {
@@ -1035,13 +1129,15 @@ erDiagram
 
 #### event_actions
 
-| 컬럼           | 타입        | 제약조건                     | 기본값  | 설명     |
-|--------------|-----------|--------------------------|------|--------|
-| id           | UUID      | PK                       | auto | 고유 식별자 |
-| event_id     | UUID      | FK → events.id, NOT NULL | -    | 이벤트    |
-| log          | TEXT      | NOT NULL                 | -    | 액션 로그  |
-| triggered_at | TIMESTAMP | NOT NULL                 | -    | 발동 시각  |
-| created_at   | TIMESTAMP | NOT NULL                 | auto | 생성일    |
+| 컬럼          | 타입        | 제약조건                     | 기본값  | 설명                      |
+|-------------|-----------|--------------------------|------|-------------------------|
+| id          | UUID      | PK                       | auto | 고유 식별자                  |
+| event_id    | UUID      | FK → events.id, NOT NULL | -    | 이벤트                     |
+| user_id     | UUID      | FK → users.id            | NULL | 액션 승인/거절한 사용자 (null이면 자동) |
+| action      | TEXT      | NOT NULL                 | -    | 액션 종류 또는 이름             |
+| description | TEXT      | NOT NULL                 | -    | 액션 실행 결과 또는 설명          |
+| created_at  | TIMESTAMP | NOT NULL                 | auto | 생성일                     |
+| updated_at  | TIMESTAMP | NOT NULL                 | auto | 수정일                     |
 
 #### notifications
 
@@ -1224,7 +1320,7 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ## 🐛 Known Issues
 
-> 최종 감사일: 2026-02-05
+> 최종 감사일: 2026-02-11
 
 ### 고아 코드
 
@@ -1235,11 +1331,9 @@ Caddy 리버스 프록시를 통해 `/api/*` 경로로 서비스됩니다.
 
 ### 미구현 코드
 
-| 파일                    | 기능        | 현재 상태                        |
-|-----------------------|-----------|------------------------------|
-| `EventAction.java`    | 이벤트 액션 로그 | Entity만 존재, 실제 액션 트리거 로직 미구현 |
-| `Event.ragReferences` | RAG 참조 정보 | 필드만 존재, AI Agent에서 전송하지 않음   |
-| `Event.report`        | 상세 보고서    | 필드만 존재, AI Agent에서 생성하지 않음   |
+| 파일             | 기능     | 현재 상태                      |
+|----------------|--------|----------------------------|
+| `Event.report` | 상세 보고서 | 필드만 존재, AI Agent에서 생성하지 않음 |
 
 ### 보안 이슈
 
