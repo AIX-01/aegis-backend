@@ -10,8 +10,6 @@ import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -118,16 +116,5 @@ public class EventController {
 
         String presignedUrl = s3Service.generateDownloadUrl(id);
         return ResponseEntity.ok(Map.of("url", presignedUrl, "filename", "event_" + id + ".mp4"));
-    }
-
-    /**
-     * Tool 실행 결과 기록 (Python Agent에서 호출)
-     */
-    @PostMapping("/{id}/actions")
-    public ResponseEntity<Map<String, Object>> recordEventAction(
-            @PathVariable UUID id,
-            @RequestBody com.aegis.aegisbackend.domain.event.dto.EventActionRequest request) {
-        eventService.recordEventAction(id, request);
-        return ResponseEntity.ok(Map.of("success", true));
     }
 }
