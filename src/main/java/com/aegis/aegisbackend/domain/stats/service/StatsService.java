@@ -30,6 +30,10 @@ public class StatsService {
             "VANDALISM", "파손"
     );
 
+    // 기본 날짜 범위 (전체 기간 조회용)
+    private static final LocalDateTime MIN_DATE = LocalDateTime.of(1970, 1, 1, 0, 0);
+    private static final LocalDateTime MAX_DATE = LocalDateTime.of(2100, 12, 31, 23, 59, 59);
+
     // --- 새로운 통계 서비스 메서드 ---
 
     @Transactional(readOnly = true)
@@ -62,7 +66,10 @@ public class StatsService {
 
     @Transactional(readOnly = true)
     public List<PeriodTrendDto> getPeriodTrend(LocalDateTime startDate, LocalDateTime endDate) {
-        List<Object[]> results = eventRepository.findPeriodTrendBetween(startDate, endDate);
+        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
+        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
+
+        List<Object[]> results = eventRepository.findPeriodTrendBetween(start, end);
         return results.stream()
                 .map(row -> PeriodTrendDto.builder()
                         .period(row[0].toString()) // DATE(e.occurred_at) 결과는 String (yyyy-MM-dd)
@@ -74,7 +81,10 @@ public class StatsService {
 
     @Transactional(readOnly = true)
     public List<EventTypeDistributionDto> getEventTypeDistribution(LocalDateTime startDate, LocalDateTime endDate) {
-        List<Object[]> results = eventRepository.countEventTypeDistributionBetween(startDate, endDate);
+        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
+        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
+
+        List<Object[]> results = eventRepository.countEventTypeDistributionBetween(start, end);
         return results.stream()
                 .map(row -> EventTypeDistributionDto.builder()
                         .type(EVENT_TYPE_NAME_MAP.getOrDefault(row[0].toString(), row[0].toString()))
@@ -85,7 +95,10 @@ public class StatsService {
 
     @Transactional(readOnly = true)
     public List<CameraDistributionDto> getCameraDistribution(LocalDateTime startDate, LocalDateTime endDate) {
-        List<Object[]> results = eventRepository.countCameraDistributionBetween(startDate, endDate);
+        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
+        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
+
+        List<Object[]> results = eventRepository.countCameraDistributionBetween(start, end);
         return results.stream()
                 .map(row -> CameraDistributionDto.builder()
                         .cameraName(row[0].toString())
@@ -96,15 +109,18 @@ public class StatsService {
 
     @Transactional(readOnly = true)
     public PeriodSummaryDto getPeriodSummary(LocalDateTime startDate, LocalDateTime endDate) {
-        long totalEvents = eventRepository.countTotalEventsBetween(startDate, endDate);
-        long resolvedEvents = eventRepository.countResolvedEventsBetween(startDate, endDate);
-        List<String> topEventTypes = eventRepository.findTopEventTypeBetween(startDate, endDate);
-        long alerts = eventRepository.countAlertsBetween(startDate, endDate);
+        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
+        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
+
+        long totalEvents = eventRepository.countTotalEventsBetween(start, end);
+        long resolvedEvents = eventRepository.countResolvedEventsBetween(start, end);
+        List<String> topEventTypes = eventRepository.findTopEventTypeBetween(start, end);
+        long alerts = eventRepository.countAlertsBetween(start, end);
 
         String topEventType = topEventTypes.isEmpty() ? "-" : EVENT_TYPE_NAME_MAP.getOrDefault(topEventTypes.get(0), topEventTypes.get(0));
 
         return PeriodSummaryDto.builder()
-                .period(formatPeriod(startDate, endDate)) // 기간 포맷팅 로직 추가
+                .period(formatPeriod(start, end))
                 .totalEvents(totalEvents)
                 .resolvedEvents(resolvedEvents)
                 .topEventType(topEventType)
@@ -112,10 +128,15 @@ public class StatsService {
                 .build();
     }
 
-    // 기간 포맷팅 헬퍼 메서드 (예시)
+    // 기간 포맷팅 헬퍼 메서드
     private String formatPeriod(LocalDateTime startDate, LocalDateTime endDate) {
         LocalDate start = startDate.toLocalDate();
         LocalDate end = endDate.toLocalDate();
+
+        // 전체 기간인 경우 (MIN_DATE, MAX_DATE와 비교)
+        if (start.getYear() == 1970 && end.getYear() == 2100) {
+            return "전체 기간";
+        }
 
         if (start.isEqual(end)) {
             return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
@@ -127,7 +148,4 @@ public class StatsService {
             return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + " ~ " + end.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         }
     }
-
-    // --- 기존 통계 서비스 메서드 (삭제) ---
-    // 기존 메서드들은 새로운 구조로 대체되었으므로 삭제합니다.
 }
