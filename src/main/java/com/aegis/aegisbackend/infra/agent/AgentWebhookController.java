@@ -18,8 +18,10 @@ import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
 import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
 import com.aegis.aegisbackend.infra.agent.dto.EventActionRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventActionUpdateRequest;
 import com.aegis.aegisbackend.infra.agent.dto.EventUpdateRequest;
 import com.aegis.aegisbackend.infra.s3.S3Service;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -51,7 +53,7 @@ public class AgentWebhookController {
      * 이벤트 생성
      */
     @PostMapping("/events")
-    public ResponseEntity<?> createEvent(@RequestBody CreateEventRequest request) {
+    public ResponseEntity<?> createEvent(@RequestBody @Valid CreateEventRequest request) {
         log.info("이벤트 생성 요청: cameraId={}, risk={}, type={}",
                 request.getCameraId(), request.getRisk(), request.getType());
 
@@ -109,9 +111,6 @@ public class AgentWebhookController {
             }
             if (request.getType() != null) {
                 event.setType(EventType.fromValue(request.getType()));
-            }
-            if (request.getClipUrl() != null) {
-                event.setClipUrl(request.getClipUrl());
             }
             if (request.getSummary() != null) {
                 event.setSummary(request.getSummary());
@@ -206,28 +205,23 @@ public class AgentWebhookController {
     @PostMapping("/events/{eventId}/actions")
     public ResponseEntity<?> createEventAction(
             @PathVariable UUID eventId,
-            @RequestBody EventActionRequest request) {
-        log.info("이벤트 액션 생성 요청: eventId={}, action={}", eventId, request.getAction());
+            @RequestBody @Valid EventActionRequest request) {
+        log.info("이벤트 액션 생성 요청: eventId={}, action={}, confirm={}",
+                eventId, request.getAction(), request.getConfirm());
 
         try {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            User user = null;
-            if (request.getUserId() != null && !request.getUserId().isEmpty()) {
-                user = userRepository.findById(UUID.fromString(request.getUserId()))
-                        .orElse(null);
-            }
-
             EventAction eventAction = EventAction.builder()
                     .event(event)
-                    .user(user)
                     .action(request.getAction())
                     .description(request.getDescription())
                     .build();
 
             EventAction savedAction = eventActionRepository.save(eventAction);
-            log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
+            log.info("이벤트 액션 생성 완료: actionId={}, confirm={}",
+                    savedAction.getId(), request.getConfirm());
 
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("actionId", savedAction.getId().toString()));
@@ -250,7 +244,7 @@ public class AgentWebhookController {
     public ResponseEntity<?> updateEventAction(
             @PathVariable UUID eventId,
             @PathVariable UUID actionId,
-            @RequestBody EventActionRequest request) {
+            @RequestBody @Valid EventActionUpdateRequest request) {
         log.info("이벤트 액션 수정 요청: eventId={}, actionId={}", eventId, actionId);
 
         try {
@@ -260,17 +254,13 @@ public class AgentWebhookController {
             EventAction eventAction = eventActionRepository.findById(actionId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ACTION_NOT_FOUND));
 
-            if (request.getUserId() != null) {
+            if (request.getUserId() != null && !request.getUserId().isEmpty()) {
                 User user = userRepository.findById(UUID.fromString(request.getUserId()))
                         .orElse(null);
                 eventAction.setUser(user);
             }
-            if (request.getAction() != null) {
-                eventAction.setAction(request.getAction());
-            }
-            if (request.getDescription() != null) {
-                eventAction.setDescription(request.getDescription());
-            }
+            eventAction.setAction(request.getAction());
+            eventAction.setDescription(request.getDescription());
 
             eventActionRepository.save(eventAction);
             log.info("이벤트 액션 수정 완료: actionId={}", actionId);
