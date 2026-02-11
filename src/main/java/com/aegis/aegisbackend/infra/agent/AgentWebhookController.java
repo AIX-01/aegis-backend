@@ -206,8 +206,7 @@ public class AgentWebhookController {
     public ResponseEntity<?> createEventAction(
             @PathVariable UUID eventId,
             @RequestBody @Valid EventActionRequest request) {
-        log.info("이벤트 액션 생성 요청: eventId={}, action={}, confirm={}",
-                eventId, request.getAction(), request.getConfirm());
+        log.info("이벤트 액션 생성 요청: eventId={}, action={}", eventId, request.getAction());
 
         try {
             Event event = eventRepository.findById(eventId)
@@ -220,8 +219,7 @@ public class AgentWebhookController {
                     .build();
 
             EventAction savedAction = eventActionRepository.save(eventAction);
-            log.info("이벤트 액션 생성 완료: actionId={}, confirm={}",
-                    savedAction.getId(), request.getConfirm());
+            log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
 
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("actionId", savedAction.getId().toString()));

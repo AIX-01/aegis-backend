@@ -1,16 +1,13 @@
 package com.aegis.aegisbackend.infra.agent.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 이벤트 액션 생성/수정 요청 DTO (Agent → Spring)
+ * 이벤트 액션 생성 요청 DTO (Agent → Spring)
  */
 @Data
 public class EventActionRequest {
-    @NotNull(message = "confirm은 필수입니다")
-    private Boolean confirm;
 
     @NotBlank(message = "action은 필수입니다")
     private String action;
