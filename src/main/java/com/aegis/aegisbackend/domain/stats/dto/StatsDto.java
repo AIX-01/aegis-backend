@@ -24,7 +24,6 @@ public class StatsDto {
     public static class EventTypeStats {
         private String type;
         private long count;
-        private String color;
     }
 
     @Data

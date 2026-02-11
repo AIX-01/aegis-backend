@@ -69,14 +69,6 @@ public class StatsService {
                 "VANDALISM", "파손"
         );
 
-        Map<String, String> colorMap = Map.of(
-                "ASSAULT", "hsl(var(--destructive))",
-                "BURGLARY", "hsl(var(--destructive))",
-                "DUMP", "hsl(var(--warning))",
-                "SWOON", "hsl(var(--warning))",
-                "VANDALISM", "hsl(var(--warning))"
-        );
-
         List<EventTypeStats> stats = new ArrayList<>();
 
         for (Object[] row : results) {
@@ -86,7 +78,6 @@ public class StatsService {
             stats.add(EventTypeStats.builder()
                     .type(typeNameMap.getOrDefault(type, type))
                     .count(count)
-                    .color(colorMap.getOrDefault(type, "hsl(var(--muted))"))
                     .build());
         }
 
@@ -123,4 +114,3 @@ public class StatsService {
         return monthlyStats;
     }
 }
-
