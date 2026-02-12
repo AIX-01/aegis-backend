@@ -29,6 +29,15 @@ public class StatsDto {
         private long count;
     }
 
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class HourlyTrendDto {
+        private String hour;
+        private long count;
+    }
+
     // --- 일간 상세 분석용 DTO ---
 
     @Data
@@ -39,6 +48,7 @@ public class StatsDto {
         private long totalEvents;
         private List<CameraDistributionDto> cameraDistribution;
         private List<EventTypeDistributionDto> eventTypeDistribution;
+        private List<HourlyTrendDto> hourlyTrend;
     }
 
     // --- 기간별 통계용 DTO ---

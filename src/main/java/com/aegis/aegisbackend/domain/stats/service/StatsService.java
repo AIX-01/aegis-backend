@@ -1,9 +1,11 @@
 package com.aegis.aegisbackend.domain.stats.service;
 
+import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.stats.dto.StatsDto.*;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,8 +13,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Slf4j
 @Service
@@ -41,26 +45,37 @@ public class StatsService {
         LocalDateTime startOfDay = date.with(LocalTime.MIN);
         LocalDateTime endOfDay = date.with(LocalTime.MAX);
 
-        long totalEvents = eventRepository.countTotalEventsBetween(startOfDay, endOfDay);
+        // Specification을 사용하여 해당 날짜의 모든 이벤트를 한 번에 조회
+        Specification<Event> spec = (root, query, cb) -> cb.between(root.get("occurredAt"), startOfDay, endOfDay);
+        List<Event> events = eventRepository.findAll(spec);
 
-        List<CameraDistributionDto> cameraDistribution = eventRepository.countCameraDistributionBetween(startOfDay, endOfDay).stream()
-                .map(row -> CameraDistributionDto.builder()
-                        .cameraName(row[0].toString())
-                        .count(((Number) row[1]).longValue())
-                        .build())
+        // 조회된 이벤트 리스트를 스트림으로 처리하여 모든 통계 계산
+        long totalEvents = events.size();
+
+        List<CameraDistributionDto> cameraDistribution = events.stream()
+                .collect(Collectors.groupingBy(event -> event.getCamera().getName(), Collectors.counting()))
+                .entrySet().stream()
+                .map(entry -> new CameraDistributionDto(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
 
-        List<EventTypeDistributionDto> eventTypeDistribution = eventRepository.countEventTypeDistributionBetween(startOfDay, endOfDay).stream()
-                .map(row -> EventTypeDistributionDto.builder()
-                        .type(EVENT_TYPE_NAME_MAP.getOrDefault(row[0].toString(), row[0].toString()))
-                        .count(((Number) row[1]).longValue())
-                        .build())
+        List<EventTypeDistributionDto> eventTypeDistribution = events.stream()
+                .collect(Collectors.groupingBy(Event::getType, Collectors.counting()))
+                .entrySet().stream()
+                .map(entry -> new EventTypeDistributionDto(EVENT_TYPE_NAME_MAP.getOrDefault(entry.getKey().name(), entry.getKey().name()), entry.getValue()))
+                .collect(Collectors.toList());
+
+        Map<Integer, Long> hourlyCountMap = events.stream()
+                .collect(Collectors.groupingBy(event -> event.getOccurredAt().getHour(), Collectors.counting()));
+
+        List<HourlyTrendDto> hourlyTrend = IntStream.range(0, 24)
+                .mapToObj(hour -> new HourlyTrendDto(String.format("%02d", hour), hourlyCountMap.getOrDefault(hour, 0L)))
                 .collect(Collectors.toList());
 
         return DailySummaryDto.builder()
                 .totalEvents(totalEvents)
                 .cameraDistribution(cameraDistribution)
                 .eventTypeDistribution(eventTypeDistribution)
+                .hourlyTrend(hourlyTrend)
                 .build();
     }
 
