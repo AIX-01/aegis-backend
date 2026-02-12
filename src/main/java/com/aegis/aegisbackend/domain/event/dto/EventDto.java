@@ -52,18 +52,28 @@ public class EventDto {
     @AllArgsConstructor
     public static class ActionDto {
         private String id;
-        private String userId;
         private String action;
         private String description;
         private String createdAt;
+        private boolean pending;
 
         public static ActionDto from(EventAction eventAction) {
             return ActionDto.builder()
                     .id(eventAction.getId().toString())
-                    .userId(eventAction.getUser() != null ? eventAction.getUser().getId().toString() : null)
                     .action(eventAction.getAction())
                     .description(eventAction.getDescription())
                     .createdAt(eventAction.getCreatedAt().toString())
+                    .pending(false)
+                    .build();
+        }
+
+        public static ActionDto from(EventAction eventAction, boolean isPending) {
+            return ActionDto.builder()
+                    .id(eventAction.getId().toString())
+                    .action(eventAction.getAction())
+                    .description(eventAction.getDescription())
+                    .createdAt(eventAction.getCreatedAt().toString())
+                    .pending(isPending)
                     .build();
         }
     }
