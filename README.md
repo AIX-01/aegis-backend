@@ -890,14 +890,14 @@ AI Agent                         Spring                          Frontend
 
 #### Agent Webhook (`/internal/agent`)
 
-| Method | Path                         | 설명             |
-|--------|------------------------------|----------------|
-| POST   | `/events`                    | 이벤트 생성         |
-| PATCH  | `/events/{id}`               | 이벤트 수정         |
-| GET    | `/events/{id}/clip/upload-url` | 클립 업로드 URL 발급 |
-| POST   | `/events/{id}/clip/confirm`  | 클립 업로드 완료 확인   |
-| POST   | `/events/{id}/actions`       | 이벤트 액션 생성      |
-| PATCH  | `/events/{id}/actions/{actionId}` | 이벤트 액션 수정 |
+| Method | Path                                    | 설명                |
+|--------|-----------------------------------------|-------------------|
+| POST   | `/events`                               | 이벤트 생성            |
+| PATCH  | `/events/{id}`                          | 이벤트 수정            |
+| GET    | `/events/{id}/clip/upload-url`          | 클립 업로드 URL 발급     |
+| POST   | `/events/{id}/clip/confirm`             | 클립 업로드 완료 확인      |
+| POST   | `/events/{id}/actions`                  | 이벤트 액션 생성         |
+| PATCH  | `/events/{id}/actions/{actionId}`       | 이벤트 액션 수정         |
 | POST   | `/events/{id}/actions/{actionId}/pending` | 액션 승인 대기 (Human-in-the-Loop) |
 
 ##### POST /internal/agent/events

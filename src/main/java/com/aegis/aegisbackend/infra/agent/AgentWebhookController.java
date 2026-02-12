@@ -225,6 +225,9 @@ public class AgentWebhookController {
             EventAction savedAction = eventActionRepository.save(eventAction);
             log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
 
+            // SSE로 액션 생성 알림 (토스트 없이 모달만 업데이트)
+            sseEmitterService.broadcastActionUpdate(eventId, savedAction.getId());
+
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("actionId", savedAction.getId().toString()));
 
@@ -267,6 +270,9 @@ public class AgentWebhookController {
             eventActionRepository.save(eventAction);
             log.info("이벤트 액션 수정 완료: actionId={}", actionId);
 
+            // SSE로 액션 수정 알림 (토스트 없이 모달만 업데이트)
+            sseEmitterService.broadcastActionUpdate(eventId, actionId);
+
             return ResponseEntity.ok(Map.of("actionId", actionId.toString()));
 
         } catch (BusinessException e) {
@@ -290,7 +296,7 @@ public class AgentWebhookController {
         log.info("Pending 액션 요청: eventId={}, actionId={}", eventId, actionId);
 
         // 이벤트 존재 확인
-        eventRepository.findById(eventId)
+        Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
         // 액션 존재 확인
@@ -301,7 +307,11 @@ public class AgentWebhookController {
         DeferredResult<PendingActionResponse> deferredResult =
                 pendingActionService.registerPending(actionId, eventId);
 
-        // SSE로 프론트엔드에 알림
+        // 알림 생성 및 SSE 전송
+        notificationService.createPendingActionNotifications(
+                event, eventAction.getAction(), eventAction.getDescription());
+
+        // SSE로 프론트엔드에 pending 상태 알림
         sseEmitterService.broadcastActionPending(eventId, actionId,
                 eventAction.getAction(), eventAction.getDescription());
 

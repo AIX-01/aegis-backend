@@ -120,6 +120,23 @@ public class NotificationService {
         log.info("분석 완료 알림 생성: eventId={}, users={}", event.getId(), users.size());
     }
 
+    /**
+     * 액션 승인 요청 시 알림 (INFO)
+     */
+    @Transactional
+    public void createPendingActionNotifications(Event event, String action, String description) {
+        Camera camera = event.getCamera();
+        List<User> users = getNotificationTargetUsers(camera.getId());
+
+        String title = "승인 요청";
+        String message = String.format("%s: %s", action, description);
+
+        for (User user : users) {
+            createNotification(user.getId(), event.getId(), NotificationType.INFO, title, message);
+        }
+        log.info("승인 요청 알림 생성: eventId={}, action={}, users={}", event.getId(), action, users.size());
+    }
+
     private List<User> getNotificationTargetUsers(UUID cameraId) {
         List<User> assignedUsers = userRepository.findUsersByCameraId(cameraId);
         List<User> admins = userRepository.findByRole(UserRole.ADMIN);

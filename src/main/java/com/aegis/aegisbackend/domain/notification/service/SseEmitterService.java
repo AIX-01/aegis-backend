@@ -191,6 +191,27 @@ public class SseEmitterService {
     }
 
     /**
+     * 액션 업데이트 브로드캐스트 (생성/수정 - 토스트 없이 모달만 업데이트)
+     */
+    public void broadcastActionUpdate(UUID eventId, UUID actionId) {
+        log.info("액션 업데이트 브로드캐스트: eventId={}, actionId={}", eventId, actionId);
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString()
+        );
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("action-update")
+                        .data(data));
+            } catch (IOException e) {
+                log.warn("액션 업데이트 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
      * 액션 승인 대기 브로드캐스트
      */
     public void broadcastActionPending(UUID eventId, UUID actionId, String action, String description) {
