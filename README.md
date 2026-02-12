@@ -39,6 +39,7 @@ src/main/java/com/aegis/aegisbackend/
 │   │   └── service/CameraService.java
 │   ├── event/                      # 이벤트
 │   │   ├── controller/EventController.java
+│   │   ├── controller/ActionController.java  # 액션 승인/거부 API
 │   │   ├── dto/EventDto.java
 │   │   ├── entity/Event.java
 │   │   ├── entity/EventAction.java     # 이벤트 액션 로그
@@ -92,11 +93,14 @@ src/main/java/com/aegis/aegisbackend/
 └── infra/                          # 인프라 계층
     ├── agent/                      # AI Agent 연동
     │   ├── AgentWebhookController.java
-    │   └── dto/
-    │       ├── CreateEventRequest.java
-    │       ├── EventActionRequest.java
-    │       ├── EventActionUpdateRequest.java
-    │       └── EventUpdateRequest.java
+    │   ├── dto/
+    │   │   ├── CreateEventRequest.java
+    │   │   ├── EventActionRequest.java
+    │   │   ├── EventActionUpdateRequest.java
+    │   │   ├── EventUpdateRequest.java
+    │   │   └── PendingActionResponse.java
+    │   └── service/
+    │       └── PendingActionService.java
     ├── mediamtx/                   # MediaMTX 연동
     │   ├── MediaMTXSyncService.java
     │   └── MediaMTXWebhookController.java
@@ -163,6 +167,33 @@ src/main/java/com/aegis/aegisbackend/
    - Request: { userId (선택), action, description }
    - userId가 있으면 승인/거절 사용자 업데이트
    - Response: { actionId }
+
+8. AI Agent → POST /internal/agent/events/{id}/actions/{actionId}/pending (Human-in-the-Loop)
+   - Request: (없음)
+   - DeferredResult로 응답 홀딩
+   - SSE "action-pending" 브로드캐스트
+   - 사용자 승인/거부 시 응답 반환
+   - Response: { userId, userName, userEmail, result }
+```
+
+### 2-1. Human-in-the-Loop 승인 흐름
+
+```
+AI Agent                         Spring                          Frontend
+    |                               |                                |
+    |-- POST /actions ------------>|                                |
+    |<-- { actionId } -------------|                                |
+    |                               |                                |
+    |-- POST /actions/{id}/pending->|                                |
+    |   (응답 홀딩)                  |-- SSE "action-pending" ------->|
+    |                               |                                |
+    |                               |   [승인/거부 UI 표시]            |
+    |                               |                                |
+    |                               |<-- POST /actions/{id}/resolve -|
+    |                               |    { approved: true/false }    |
+    |                               |                                |
+    |<-- { userId, userName, ------|-- SSE "action-resolved" ------>|
+    |      userEmail, result }     |                                |
 ```
 
 ### 3. WebRTC 스트림 인증 흐름
@@ -522,6 +553,7 @@ src/main/java/com/aegis/aegisbackend/
 | DELETE | `/{id}`                | 이벤트 삭제 (Admin)              |
 | GET    | `/{id}/clip-url`       | 클립 재생용 presigned URL        |
 | GET    | `/{id}/clip/download-url` | 클립 다운로드용 presigned URL   |
+| POST   | `/{id}/actions/{actionId}/resolve` | 액션 승인/거부 (Human-in-the-Loop) |
 
 #### GET /api/events
 
@@ -612,6 +644,28 @@ src/main/java/com/aegis/aegisbackend/
 ```
 
 **Error:** `404 Not Found` (클립이 없는 경우)
+
+#### POST /api/events/{id}/actions/{actionId}/resolve
+
+액션 승인/거부 (Human-in-the-Loop)
+
+**Request:**
+
+```json
+{
+  "approved": boolean
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "success": true
+}
+```
+
+**Error:** `400 Bad Request` (액션을 찾을 수 없거나 이미 처리됨)
 
 ### Notification API (`/api/notifications`)
 
@@ -844,6 +898,7 @@ src/main/java/com/aegis/aegisbackend/
 | POST   | `/events/{id}/clip/confirm`  | 클립 업로드 완료 확인   |
 | POST   | `/events/{id}/actions`       | 이벤트 액션 생성      |
 | PATCH  | `/events/{id}/actions/{actionId}` | 이벤트 액션 수정 |
+| POST   | `/events/{id}/actions/{actionId}/pending` | 액션 승인 대기 (Human-in-the-Loop) |
 
 ##### POST /internal/agent/events
 
@@ -956,6 +1011,25 @@ clips/{eventId}.mp4 존재 확인 후 Event.clipUrl 저장
 ```json
 {
   "actionId": "UUID"
+}
+```
+
+##### POST /internal/agent/events/{id}/actions/{actionId}/pending
+
+액션 승인 대기 (Human-in-the-Loop)
+
+DeferredResult를 사용하여 사용자 응답까지 HTTP 연결 유지
+
+**Request:** Body 없음
+
+**Response:** `200 OK` (사용자 승인/거부 후 반환)
+
+```json
+{
+  "userId": "UUID",
+  "userName": "string",
+  "userEmail": "string",
+  "result": true/false
 }
 ```
 
@@ -1194,14 +1268,16 @@ erDiagram
 
 ### 이벤트 타입
 
-| 이벤트             | 설명        |
-|-----------------|-----------|
-| `connect`       | 연결 성공     |
-| `notification`  | 새 알림      |
-| `camera`        | 카메라 상태 변경 |
-| `event`         | 이벤트 생성/수정 |
-| `event-deleted` | 이벤트 삭제    |
-| `member`        | 멤버 변경     |
+| 이벤트             | 설명                      |
+|-----------------|-------------------------|
+| `connect`       | 연결 성공                   |
+| `notification`  | 새 알림                    |
+| `camera`        | 카메라 상태 변경               |
+| `event`         | 이벤트 생성/수정               |
+| `event-deleted` | 이벤트 삭제                  |
+| `member`        | 멤버 변경                   |
+| `action-pending` | 액션 승인 대기 (Human-in-the-Loop) |
+| `action-resolved` | 액션 해결됨                 |
 
 ## 에러 코드
 
