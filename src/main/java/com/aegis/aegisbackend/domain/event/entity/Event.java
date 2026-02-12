@@ -80,8 +80,9 @@ public class Event {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    /** 액션 목록 */
+    /** 액션 목록 (생성순 정렬) */
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("createdAt ASC")
     @Builder.Default
     private List<EventAction> actions = new ArrayList<>();
 
