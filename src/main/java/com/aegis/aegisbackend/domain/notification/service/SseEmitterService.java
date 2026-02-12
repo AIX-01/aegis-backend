@@ -180,7 +180,13 @@ public class SseEmitterService {
      * SSE 브로드캐스트 공통 메서드
      */
     private void broadcast(String eventName, Object data, String logPrefix) {
-        log.debug("{} 브로드캐스트: 연결된 사용자 수={}", logPrefix, emitters.size());
+        int userCount = emitters.size();
+        log.info("{} 브로드캐스트: 연결된 사용자 수={}", logPrefix, userCount);
+
+        if (userCount == 0) {
+            return;
+        }
+
         emitters.forEach((userId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()
