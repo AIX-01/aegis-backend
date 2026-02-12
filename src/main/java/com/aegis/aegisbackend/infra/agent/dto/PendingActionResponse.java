@@ -17,7 +17,6 @@ public class PendingActionResponse {
     private String userName;
     private String userEmail;
     private boolean result;
-    private boolean timeout;
 
     public static PendingActionResponse approved(String userId, String userName, String userEmail) {
         return PendingActionResponse.builder()
@@ -25,7 +24,6 @@ public class PendingActionResponse {
                 .userName(userName)
                 .userEmail(userEmail)
                 .result(true)
-                .timeout(false)
                 .build();
     }
 
@@ -35,14 +33,6 @@ public class PendingActionResponse {
                 .userName(userName)
                 .userEmail(userEmail)
                 .result(false)
-                .timeout(false)
-                .build();
-    }
-
-    public static PendingActionResponse timeout() {
-        return PendingActionResponse.builder()
-                .result(false)
-                .timeout(true)
                 .build();
     }
 }
