@@ -20,6 +20,8 @@ import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
 import com.aegis.aegisbackend.infra.agent.dto.EventActionRequest;
 import com.aegis.aegisbackend.infra.agent.dto.EventActionUpdateRequest;
 import com.aegis.aegisbackend.infra.agent.dto.EventUpdateRequest;
+import com.aegis.aegisbackend.infra.agent.dto.PendingActionResponse;
+import com.aegis.aegisbackend.infra.agent.service.PendingActionService;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.DeferredResult;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -47,6 +50,7 @@ public class AgentWebhookController {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
+    private final PendingActionService pendingActionService;
     private final S3Service s3Service;
 
     /**
@@ -274,5 +278,33 @@ public class AgentWebhookController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * 이벤트 액션 승인 대기 (DeferredResult로 사용자 응답까지 홀딩)
+     */
+    @PostMapping("/events/{eventId}/actions/{actionId}/pending")
+    public DeferredResult<PendingActionResponse> pendingAction(
+            @PathVariable UUID eventId,
+            @PathVariable UUID actionId) {
+        log.info("Pending 액션 요청: eventId={}, actionId={}", eventId, actionId);
+
+        // 이벤트 존재 확인
+        eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        // 액션 존재 확인
+        EventAction eventAction = eventActionRepository.findById(actionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ACTION_NOT_FOUND));
+
+        // DeferredResult 등록
+        DeferredResult<PendingActionResponse> deferredResult =
+                pendingActionService.registerPending(actionId, eventId);
+
+        // SSE로 프론트엔드에 알림
+        sseEmitterService.broadcastActionPending(eventId, actionId,
+                eventAction.getAction(), eventAction.getDescription());
+
+        return deferredResult;
     }
 }
