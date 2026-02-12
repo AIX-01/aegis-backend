@@ -90,7 +90,7 @@ public class StatsService {
 
         List<Camera> allCameras = cameraRepository.findAll();
         long totalCameras = allCameras.size();
-        long activeCameras = allCameras.stream().filter(Camera::isConnected).count();
+        long activeCameras = allCameras.stream().filter(Camera::getConnected).count();
 
         return new KpiData(
                 String.format("%,d", currentTotal),

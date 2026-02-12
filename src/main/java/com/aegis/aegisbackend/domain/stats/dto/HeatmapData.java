@@ -1,5 +1,6 @@
 package com.aegis.aegisbackend.domain.stats.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -11,6 +12,7 @@ import java.util.List;
 @Setter
 public class HeatmapData {
     private String title;
+    @JsonProperty("yAxis")
     private List<String> yAxis;
     private List<HeatmapPoint> series;
 
