@@ -82,7 +82,7 @@ public class SseEmitterService {
     public void sendNotification(UUID userId, NotificationDto notification) {
         SseEmitter emitter = emitters.get(userId);
         if (emitter == null) {
-            log.debug("SSE 연결 없음: userId={}", userId);
+            log.info("SSE 연결 없음 - 알림 전송 불가: userId={}", userId);
             return;
         }
 
@@ -90,7 +90,7 @@ public class SseEmitterService {
             emitter.send(SseEmitter.event()
                     .name("notification")
                     .data(notification));
-            log.debug("SSE 알림 전송: userId={}, notificationId={}", userId, notification.getId());
+            log.info("SSE 알림 전송 성공: userId={}, title={}", userId, notification.getTitle());
         } catch (IOException e) {
             log.warn("SSE 알림 전송 실패: userId={}", userId);
             emitters.remove(userId);
@@ -110,81 +110,90 @@ public class SseEmitterService {
      * 모든 사용자에게 알림 전송 (브로드캐스트)
      */
     public void broadcastNotification(NotificationDto notification) {
-        emitters.forEach((userId, emitter) -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("notification")
-                        .data(notification));
-            } catch (IOException e) {
-                log.warn("SSE 브로드캐스트 실패: userId={}", userId);
-                emitters.remove(userId);
-            }
-        });
+        broadcast("notification", notification, "알림");
     }
 
     /**
      * 카메라 이벤트 브로드캐스트 (추가/삭제/상태변경)
      */
     public void broadcastCamera(Object cameraData) {
-        log.debug("카메라 이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
-        emitters.forEach((userId, emitter) -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("camera")
-                        .data(cameraData));
-            } catch (IOException e) {
-                log.warn("카메라 SSE 전송 실패: userId={}", userId);
-                emitters.remove(userId);
-            }
-        });
+        broadcast("camera", cameraData, "카메라");
     }
 
     /**
      * 이벤트 브로드캐스트 (이벤트 생성/삭제/상태변경)
      */
     public void broadcastEvent(Object eventData) {
-        log.debug("이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
-        emitters.forEach((userId, emitter) -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("event")
-                        .data(eventData));
-            } catch (IOException e) {
-                log.warn("이벤트 SSE 전송 실패: userId={}", userId);
-                emitters.remove(userId);
-            }
-        });
+        broadcast("event", eventData, "이벤트");
     }
 
     /**
      * 이벤트 삭제 브로드캐스트
      */
     public void broadcastEventDeleted(String eventId) {
-        log.debug("이벤트 삭제 브로드캐스트: eventId={}, 연결된 사용자 수={}", eventId, emitters.size());
-        emitters.forEach((userId, emitter) -> {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("event-deleted")
-                        .data(Map.of("id", eventId)));
-            } catch (IOException e) {
-                log.warn("이벤트 삭제 SSE 전송 실패: userId={}", userId);
-                emitters.remove(userId);
-            }
-        });
+        broadcast("event-deleted", Map.of("id", eventId), "이벤트 삭제");
     }
 
     /**
      * 멤버 이벤트 브로드캐스트 (승인/삭제/역할변경)
      */
     public void broadcastMember(Object memberData) {
-        log.debug("멤버 이벤트 브로드캐스트: 연결된 사용자 수={}", emitters.size());
+        broadcast("member", memberData, "멤버");
+    }
+
+    /**
+     * 액션 업데이트 브로드캐스트 (생성/수정)
+     */
+    public void broadcastActionUpdate(UUID eventId, UUID actionId) {
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString()
+        );
+        broadcast("action-update", data, "액션 업데이트");
+    }
+
+    /**
+     * 액션 승인 대기 브로드캐스트
+     */
+    public void broadcastActionPending(UUID eventId, UUID actionId, String action, String description) {
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString(),
+                "action", action,
+                "description", description
+        );
+        broadcast("action-pending", data, "액션 승인 대기");
+    }
+
+    /**
+     * 액션 해결됨 브로드캐스트 (승인/거부 완료)
+     */
+    public void broadcastActionResolved(UUID eventId, UUID actionId) {
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString()
+        );
+        broadcast("action-resolved", data, "액션 해결됨");
+    }
+
+    /**
+     * SSE 브로드캐스트 공통 메서드
+     */
+    private void broadcast(String eventName, Object data, String logPrefix) {
+        int userCount = emitters.size();
+        log.info("{} 브로드캐스트: 연결된 사용자 수={}", logPrefix, userCount);
+
+        if (userCount == 0) {
+            return;
+        }
+
         emitters.forEach((userId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()
-                        .name("member")
-                        .data(memberData));
+                        .name(eventName)
+                        .data(data));
             } catch (IOException e) {
-                log.warn("멤버 SSE 전송 실패: userId={}", userId);
+                log.warn("{} SSE 전송 실패: userId={}", logPrefix, userId);
                 emitters.remove(userId);
             }
         });

@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Builder
@@ -22,13 +21,11 @@ public class EventDto {
     private String risk;
     private String type;
     private String occurredAt;
-    private String status;
     private String clipUrl;
     private String summary;
-    private String riskScore;
-    private List<ActionDto> actions;
-    private List<Map<String, Object>> ragReferences;
     private String report;
+    private String status;
+    private List<ActionDto> actions;
 
     public static EventDto from(Event event) {
         return EventDto.builder()
@@ -39,15 +36,13 @@ public class EventDto {
                 .risk(event.getRisk().getValue())
                 .type(event.getType().getValue())
                 .occurredAt(event.getOccurredAt().toString())
-                .status(event.getStatus().getValue())
                 .clipUrl(event.getClipUrl())
                 .summary(event.getSummary())
-                .riskScore(event.getRiskScore())
+                .report(event.getReport())
+                .status(event.getStatus().getValue())
                 .actions(event.getActions() != null
                         ? event.getActions().stream().map(ActionDto::from).toList()
                         : null)
-                .ragReferences(event.getRagReferences())
-                .report(event.getReport())
                 .build();
     }
 
@@ -57,14 +52,28 @@ public class EventDto {
     @AllArgsConstructor
     public static class ActionDto {
         private String id;
-        private String log;
-        private String triggeredAt;
+        private String action;
+        private String description;
+        private String createdAt;
+        private boolean pending;
 
-        public static ActionDto from(EventAction action) {
+        public static ActionDto from(EventAction eventAction) {
             return ActionDto.builder()
-                    .id(action.getId().toString())
-                    .log(action.getLog())
-                    .triggeredAt(action.getTriggeredAt().toString())
+                    .id(eventAction.getId().toString())
+                    .action(eventAction.getAction())
+                    .description(eventAction.getDescription())
+                    .createdAt(eventAction.getCreatedAt().toString())
+                    .pending(false)
+                    .build();
+        }
+
+        public static ActionDto from(EventAction eventAction, boolean isPending) {
+            return ActionDto.builder()
+                    .id(eventAction.getId().toString())
+                    .action(eventAction.getAction())
+                    .description(eventAction.getDescription())
+                    .createdAt(eventAction.getCreatedAt().toString())
+                    .pending(isPending)
                     .build();
         }
     }

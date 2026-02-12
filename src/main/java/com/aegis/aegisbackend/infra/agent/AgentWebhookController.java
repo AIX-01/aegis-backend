@@ -4,22 +4,32 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.dto.EventDto;
 import com.aegis.aegisbackend.domain.event.entity.Event;
+import com.aegis.aegisbackend.domain.event.entity.EventAction;
+import com.aegis.aegisbackend.domain.event.repository.EventActionRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.notification.service.NotificationService;
 import com.aegis.aegisbackend.domain.notification.service.SseEmitterService;
+import com.aegis.aegisbackend.domain.user.entity.User;
+import com.aegis.aegisbackend.domain.user.repository.UserRepository;
 import com.aegis.aegisbackend.global.common.enums.EventRisk;
 import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.exception.BusinessException;
 import com.aegis.aegisbackend.global.exception.ErrorCode;
-import com.aegis.aegisbackend.infra.agent.dto.AnalysisResultRequest;
 import com.aegis.aegisbackend.infra.agent.dto.CreateEventRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventActionRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventActionUpdateRequest;
+import com.aegis.aegisbackend.infra.agent.dto.EventUpdateRequest;
+import com.aegis.aegisbackend.infra.agent.dto.PendingActionResponse;
+import com.aegis.aegisbackend.infra.agent.service.PendingActionService;
 import com.aegis.aegisbackend.infra.s3.S3Service;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.DeferredResult;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -36,15 +46,18 @@ public class AgentWebhookController {
 
     private final CameraRepository cameraRepository;
     private final EventRepository eventRepository;
+    private final EventActionRepository eventActionRepository;
+    private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
+    private final PendingActionService pendingActionService;
     private final S3Service s3Service;
 
     /**
      * 이벤트 생성
      */
     @PostMapping("/events")
-    public ResponseEntity<?> createEvent(@RequestBody CreateEventRequest request) {
+    public ResponseEntity<?> createEvent(@RequestBody @Valid CreateEventRequest request) {
         log.info("이벤트 생성 요청: cameraId={}, risk={}, type={}",
                 request.getCameraId(), request.getRisk(), request.getType());
 
@@ -67,10 +80,7 @@ public class AgentWebhookController {
             Event savedEvent = eventRepository.save(event);
             log.info("이벤트 생성 완료: eventId={}", savedEvent.getId());
 
-            // 알림 생성
             notificationService.createEventNotifications(savedEvent);
-
-            // SSE 브로드캐스트
             sseEmitterService.broadcastEvent(EventDto.from(savedEvent));
 
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -88,6 +98,54 @@ public class AgentWebhookController {
     }
 
     /**
+     * 이벤트 수정
+     */
+    @PatchMapping("/events/{eventId}")
+    public ResponseEntity<?> updateEvent(
+            @PathVariable UUID eventId,
+            @RequestBody EventUpdateRequest request) {
+        log.info("이벤트 수정 요청: eventId={}", eventId);
+
+        try {
+            Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            if (request.getRisk() != null) {
+                event.setRisk(EventRisk.fromValue(request.getRisk()));
+            }
+            if (request.getType() != null) {
+                event.setType(EventType.fromValue(request.getType()));
+            }
+            if (request.getSummary() != null) {
+                event.setSummary(request.getSummary());
+            }
+            if (request.getReport() != null) {
+                event.setReport(request.getReport());
+            }
+            if (request.getStatus() != null) {
+                event.setStatus(EventStatus.fromValue(request.getStatus()));
+            }
+
+            eventRepository.save(event);
+            log.info("이벤트 수정 완료: eventId={}", eventId);
+
+            notificationService.createEventUpdateNotifications(event);
+            sseEmitterService.broadcastEvent(EventDto.from(event));
+
+            return ResponseEntity.ok(Map.of("eventId", eventId.toString()));
+
+        } catch (BusinessException e) {
+            log.error("이벤트 수정 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("이벤트 수정 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * 클립 업로드용 presigned URL 발급
      */
     @GetMapping("/events/{eventId}/clip/upload-url")
@@ -95,7 +153,6 @@ public class AgentWebhookController {
         log.info("클립 업로드 URL 요청: eventId={}", eventId);
 
         try {
-            // 이벤트 존재 확인
             eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
@@ -120,21 +177,17 @@ public class AgentWebhookController {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            // 클립 존재 확인
             if (!s3Service.clipExists(eventId)) {
                 log.warn("클립을 찾을 수 없음: eventId={}", eventId);
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "클립을 찾을 수 없습니다"));
             }
 
-            // clipUrl 저장 (presigned 없는 기본 경로)
             String clipUrl = "clips/" + eventId + ".mp4";
             event.setClipUrl(clipUrl);
             eventRepository.save(event);
 
             log.info("클립 확정 완료: eventId={}, clipUrl={}", eventId, clipUrl);
-
-            // SSE 브로드캐스트
             sseEmitterService.broadcastEvent(EventDto.from(event));
 
             return ResponseEntity.ok(Map.of("clipUrl", clipUrl));
@@ -151,51 +204,119 @@ public class AgentWebhookController {
     }
 
     /**
-     * 분석 결과 추가
+     * 이벤트 액션 생성
      */
-    @PatchMapping("/events/{eventId}/analysis")
-    public ResponseEntity<?> addAnalysisResult(
+    @PostMapping("/events/{eventId}/actions")
+    public ResponseEntity<?> createEventAction(
             @PathVariable UUID eventId,
-            @RequestBody AnalysisResultRequest request) {
-        log.info("분석 결과 추가 요청: eventId={}", eventId);
+            @RequestBody @Valid EventActionRequest request) {
+        log.info("이벤트 액션 생성 요청: eventId={}, action={}", eventId, request.getAction());
 
         try {
             Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-            if (request.getRisk() != null) {
-                event.setRisk(EventRisk.fromValue(request.getRisk()));
-            }
-            if (request.getType() != null) {
-                event.setType(EventType.fromValue(request.getType()));
-            }
-            if (request.getSummary() != null) {
-                event.setSummary(request.getSummary());
-            }
-            if (request.getRiskScore() != null) {
-                event.setRiskScore(request.getRiskScore());
-            }
-            event.setStatus(EventStatus.ANALYZED);
+            EventAction eventAction = EventAction.builder()
+                    .event(event)
+                    .action(request.getAction())
+                    .description(request.getDescription())
+                    .build();
 
-            eventRepository.save(event);
-            log.info("분석 결과 추가 완료: eventId={}", eventId);
+            EventAction savedAction = eventActionRepository.save(eventAction);
+            log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
 
-            // 알림 생성
-            notificationService.createAnalysisNotifications(event);
+            // 알림 생성 및 SSE 전송
+            notificationService.createActionNotifications(event, request.getAction(), request.getDescription());
+            sseEmitterService.broadcastActionUpdate(eventId, savedAction.getId());
 
-            // SSE 브로드캐스트
-            sseEmitterService.broadcastEvent(EventDto.from(event));
-
-            return ResponseEntity.ok(Map.of("eventId", eventId.toString()));
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("actionId", savedAction.getId().toString()));
 
         } catch (BusinessException e) {
-            log.error("분석 결과 추가 실패: {}", e.getMessage());
+            log.error("이벤트 액션 생성 실패: {}", e.getMessage());
             return ResponseEntity.status(e.getErrorCode().getStatus())
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("분석 결과 추가 실패: {}", e.getMessage(), e);
+            log.error("이벤트 액션 생성 실패: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * 이벤트 액션 수정
+     */
+    @PatchMapping("/events/{eventId}/actions/{actionId}")
+    public ResponseEntity<?> updateEventAction(
+            @PathVariable UUID eventId,
+            @PathVariable UUID actionId,
+            @RequestBody @Valid EventActionUpdateRequest request) {
+        log.info("이벤트 액션 수정 요청: eventId={}, actionId={}", eventId, actionId);
+
+        try {
+            Event event = eventRepository.findById(eventId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+            EventAction eventAction = eventActionRepository.findById(actionId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ACTION_NOT_FOUND));
+
+            if (request.getUserId() != null && !request.getUserId().isEmpty()) {
+                User user = userRepository.findById(UUID.fromString(request.getUserId()))
+                        .orElse(null);
+                eventAction.setUser(user);
+            }
+            eventAction.setAction(request.getAction());
+            eventAction.setDescription(request.getDescription());
+
+            eventActionRepository.save(eventAction);
+            log.info("이벤트 액션 수정 완료: actionId={}", actionId);
+
+            // 알림 생성 및 SSE 전송
+            notificationService.createActionUpdateNotifications(event, request.getAction(), request.getDescription());
+            sseEmitterService.broadcastActionUpdate(eventId, actionId);
+
+            return ResponseEntity.ok(Map.of("actionId", actionId.toString()));
+
+        } catch (BusinessException e) {
+            log.error("이벤트 액션 수정 실패: {}", e.getMessage());
+            return ResponseEntity.status(e.getErrorCode().getStatus())
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("이벤트 액션 수정 실패: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 이벤트 액션 승인 대기 (DeferredResult로 사용자 응답까지 홀딩)
+     */
+    @PostMapping("/events/{eventId}/actions/{actionId}/pending")
+    public DeferredResult<PendingActionResponse> pendingAction(
+            @PathVariable UUID eventId,
+            @PathVariable UUID actionId) {
+        log.info("Pending 액션 요청: eventId={}, actionId={}", eventId, actionId);
+
+        // 이벤트 존재 확인
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+
+        // 액션 존재 확인
+        EventAction eventAction = eventActionRepository.findById(actionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_ACTION_NOT_FOUND));
+
+        // DeferredResult 등록
+        DeferredResult<PendingActionResponse> deferredResult =
+                pendingActionService.registerPending(actionId, eventId);
+
+        // 알림 생성 및 SSE 전송
+        notificationService.createPendingActionNotifications(
+                event, eventAction.getAction(), eventAction.getDescription());
+
+        // SSE로 프론트엔드에 pending 상태 알림
+        sseEmitterService.broadcastActionPending(eventId, actionId,
+                eventAction.getAction(), eventAction.getDescription());
+
+        return deferredResult;
     }
 }

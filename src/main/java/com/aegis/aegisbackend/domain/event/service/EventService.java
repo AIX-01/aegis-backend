@@ -16,6 +16,7 @@ import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.event.repository.EventSpecification;
 import com.aegis.aegisbackend.domain.camera.repository.UserCameraRepository;
 import com.aegis.aegisbackend.domain.user.repository.UserRepository;
+import com.aegis.aegisbackend.infra.agent.service.PendingActionService;
 import com.aegis.aegisbackend.infra.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class EventService {
     private final UserCameraRepository userCameraRepository;
     private final NotificationService notificationService;
     private final SseEmitterService sseEmitterService;
+    private final PendingActionService pendingActionService;
     private final S3Service s3Service;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -105,7 +107,31 @@ public class EventService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
-        return EventDto.from(event);
+        // pending 여부를 확인하여 ActionDto 생성
+        List<EventDto.ActionDto> actionDtos = null;
+        if (event.getActions() != null) {
+            actionDtos = event.getActions().stream()
+                    .map(action -> {
+                        boolean isPending = pendingActionService.isPending(action.getId());
+                        return EventDto.ActionDto.from(action, isPending);
+                    })
+                    .toList();
+        }
+
+        return EventDto.builder()
+                .id(event.getId().toString())
+                .cameraId(event.getCamera().getId().toString())
+                .cameraName(event.getCamera().getName())
+                .cameraLocation(event.getCamera().getLocation())
+                .risk(event.getRisk().getValue())
+                .type(event.getType().getValue())
+                .occurredAt(event.getOccurredAt().toString())
+                .clipUrl(event.getClipUrl())
+                .summary(event.getSummary())
+                .report(event.getReport())
+                .status(event.getStatus().getValue())
+                .actions(actionDtos)
+                .build();
     }
 
     /**

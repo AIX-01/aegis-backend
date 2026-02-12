@@ -8,21 +8,17 @@ import com.aegis.aegisbackend.global.common.enums.EventType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * 이벤트 엔티티
- * - Agent 분석으로 감지된 위험/이상 상황 기록
  */
 @Entity
 @Table(name = "events", indexes = {
@@ -47,12 +43,12 @@ public class Event {
     @JoinColumn(name = "camera_id", nullable = false)
     private Camera camera;
 
-    /** 위험 수준 (1차 분류) */
+    /** 위험 수준 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EventRisk risk;
 
-    /** 이벤트 유형 (2차 분류) */
+    /** 이벤트 유형 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EventType type;
@@ -60,55 +56,47 @@ public class Event {
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private EventStatus status = EventStatus.PROCESSING;
-
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "clip_url", columnDefinition = "TEXT")
     private String clipUrl;
 
     /** AI 분석 요약 */
     @Column(columnDefinition = "TEXT")
     private String summary;
 
-    /** 위험 점수 */
-    @Column(length = 10)
-    private String riskScore;
-
-    /** 권장 조치 목록 (1:N 관계) */
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private List<EventAction> actions = new ArrayList<>();
-
-    /** RAG 참조 문서 */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private List<Map<String, Object>> ragReferences;
-
     /** 상세 보고서 */
     @Column(columnDefinition = "TEXT")
     private String report;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private EventStatus status = EventStatus.PROCESSING;
+
     @CreationTimestamp
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /** 액션 목록 (생성순 정렬) */
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("createdAt ASC")
+    @Builder.Default
+    private List<EventAction> actions = new ArrayList<>();
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<Notification> notifications = new HashSet<>();
 
-    /** 액션 추가 헬퍼 메서드 */
+    /** 액션 추가 */
     public void addAction(EventAction action) {
         actions.add(action);
         action.setEvent(this);
     }
 
-    /** 액션 일괄 추가 헬퍼 메서드 */
+    /** 액션 일괄 추가 */
     public void addActions(List<EventAction> newActions) {
         for (EventAction action : newActions) {
             addAction(action);
