@@ -191,6 +191,51 @@ public class SseEmitterService {
     }
 
     /**
+     * 액션 승인 대기 브로드캐스트
+     */
+    public void broadcastActionPending(UUID eventId, UUID actionId, String action, String description) {
+        log.info("액션 승인 대기 브로드캐스트: eventId={}, actionId={}, 연결된 사용자 수={}",
+                eventId, actionId, emitters.size());
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString(),
+                "action", action,
+                "description", description
+        );
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("action-pending")
+                        .data(data));
+            } catch (IOException e) {
+                log.warn("액션 승인 대기 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
+     * 액션 해결됨 브로드캐스트 (승인/거부 완료)
+     */
+    public void broadcastActionResolved(UUID eventId, UUID actionId) {
+        log.info("액션 해결됨 브로드캐스트: eventId={}, actionId={}", eventId, actionId);
+        Map<String, Object> data = Map.of(
+                "eventId", eventId.toString(),
+                "actionId", actionId.toString()
+        );
+        emitters.forEach((userId, emitter) -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("action-resolved")
+                        .data(data));
+            } catch (IOException e) {
+                log.warn("액션 해결됨 SSE 전송 실패: userId={}", userId);
+                emitters.remove(userId);
+            }
+        });
+    }
+
+    /**
      * 현재 연결된 사용자 수
      */
     public int getConnectedUserCount() {
