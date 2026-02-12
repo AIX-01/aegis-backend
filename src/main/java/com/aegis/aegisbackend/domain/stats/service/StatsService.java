@@ -151,9 +151,16 @@ public class StatsService {
         switch (timeRange) {
             case "day":
                 title = "시간대별 이벤트 추이";
-                xAxis = Arrays.asList("00시", "04시", "08시", "12시", "16시", "20시", "24시");
-                Map<Integer, Long> hourly = events.stream().collect(Collectors.groupingBy(e -> e.getOccurredAt().getHour(), Collectors.counting()));
-                series = IntStream.range(0, 24).map(h -> hourly.getOrDefault(h, 0L).intValue()).boxed().collect(Collectors.toList());
+                xAxis = Arrays.asList("0-4시", "4-8시", "8-12시", "12-16시", "16-20시", "20-24시");
+                Map<Integer, Long> hourly = events.stream()
+                        .collect(Collectors.groupingBy(
+                                e -> e.getOccurredAt().getHour() / 4, // 4시간 단위로 그룹화 (0-5)
+                                Collectors.counting()
+                        ));
+                series = IntStream.range(0, 6) // 6개 구간
+                        .map(interval -> hourly.getOrDefault(interval, 0L).intValue())
+                        .boxed()
+                        .collect(Collectors.toList());
                 break;
             case "week":
                 title = "요일별 이벤트 추이";
