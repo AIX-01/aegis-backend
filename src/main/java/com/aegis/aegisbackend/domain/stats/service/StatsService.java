@@ -1,166 +1,244 @@
 package com.aegis.aegisbackend.domain.stats.service;
 
+import com.aegis.aegisbackend.domain.camera.entity.Camera;
+import com.aegis.aegisbackend.domain.camera.repository.CameraRepository;
 import com.aegis.aegisbackend.domain.event.entity.Event;
-import com.aegis.aegisbackend.domain.stats.dto.StatsDto.*;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
+import com.aegis.aegisbackend.domain.stats.dto.*;
+import com.aegis.aegisbackend.global.common.enums.EventRisk;
+import com.aegis.aegisbackend.global.common.enums.EventType;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StatsService {
 
     private final EventRepository eventRepository;
-
-    // 이벤트 유형 한글 매핑
-    private static final Map<String, String> EVENT_TYPE_NAME_MAP = Map.of(
-            "ASSAULT", "폭행",
-            "BURGLARY", "절도",
-            "DUMP", "투기",
-            "SWOON", "실신",
-            "VANDALISM", "파손"
-    );
-
-    // 기본 날짜 범위 (전체 기간 조회용)
-    private static final LocalDateTime MIN_DATE = LocalDateTime.of(1970, 1, 1, 0, 0);
-    private static final LocalDateTime MAX_DATE = LocalDateTime.of(2100, 12, 31, 23, 59, 59);
-
-    // --- 새로운 통계 서비스 메서드 ---
+    private final CameraRepository cameraRepository;
 
     @Transactional(readOnly = true)
-    public DailySummaryDto getDailySummary(LocalDateTime date) {
-        LocalDateTime startOfDay = date.with(LocalTime.MIN);
-        LocalDateTime endOfDay = date.with(LocalTime.MAX);
+    public StatisticsResponse getDashboardData(String timeRange) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startOfCurrentPeriod;
+        LocalDateTime endOfCurrentPeriod;
+        LocalDateTime startOfPreviousPeriod;
+        LocalDateTime endOfPreviousPeriod;
 
-        // Specification을 사용하여 해당 날짜의 모든 이벤트를 한 번에 조회
-        Specification<Event> spec = (root, query, cb) -> cb.between(root.get("occurredAt"), startOfDay, endOfDay);
-        List<Event> events = eventRepository.findAll(spec);
-
-        // 조회된 이벤트 리스트를 스트림으로 처리하여 모든 통계 계산
-        long totalEvents = events.size();
-
-        List<CameraDistributionDto> cameraDistribution = events.stream()
-                .collect(Collectors.groupingBy(event -> event.getCamera().getName(), Collectors.counting()))
-                .entrySet().stream()
-                .map(entry -> new CameraDistributionDto(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-
-        List<EventTypeDistributionDto> eventTypeDistribution = events.stream()
-                .collect(Collectors.groupingBy(Event::getType, Collectors.counting()))
-                .entrySet().stream()
-                .map(entry -> new EventTypeDistributionDto(EVENT_TYPE_NAME_MAP.getOrDefault(entry.getKey().name(), entry.getKey().name()), entry.getValue()))
-                .collect(Collectors.toList());
-
-        Map<Integer, Long> hourlyCountMap = events.stream()
-                .collect(Collectors.groupingBy(event -> event.getOccurredAt().getHour(), Collectors.counting()));
-
-        List<HourlyTrendDto> hourlyTrend = IntStream.range(0, 24)
-                .mapToObj(hour -> new HourlyTrendDto(String.format("%02d", hour), hourlyCountMap.getOrDefault(hour, 0L)))
-                .collect(Collectors.toList());
-
-        return DailySummaryDto.builder()
-                .totalEvents(totalEvents)
-                .cameraDistribution(cameraDistribution)
-                .eventTypeDistribution(eventTypeDistribution)
-                .hourlyTrend(hourlyTrend)
-                .build();
-    }
-
-    @Transactional(readOnly = true)
-    public List<PeriodTrendDto> getPeriodTrend(LocalDateTime startDate, LocalDateTime endDate) {
-        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
-        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
-
-        List<Object[]> results = eventRepository.findPeriodTrendBetween(start, end);
-        return results.stream()
-                .map(row -> PeriodTrendDto.builder()
-                        .period(row[0].toString()) // DATE(e.occurred_at) 결과는 String (yyyy-MM-dd)
-                        .totalEvents(((Number) row[1]).longValue())
-                        .resolvedEvents(((Number) row[2]).longValue())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<EventTypeDistributionDto> getEventTypeDistribution(LocalDateTime startDate, LocalDateTime endDate) {
-        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
-        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
-
-        List<Object[]> results = eventRepository.countEventTypeDistributionBetween(start, end);
-        return results.stream()
-                .map(row -> EventTypeDistributionDto.builder()
-                        .type(EVENT_TYPE_NAME_MAP.getOrDefault(row[0].toString(), row[0].toString()))
-                        .count(((Number) row[1]).longValue())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public List<CameraDistributionDto> getCameraDistribution(LocalDateTime startDate, LocalDateTime endDate) {
-        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
-        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
-
-        List<Object[]> results = eventRepository.countCameraDistributionBetween(start, end);
-        return results.stream()
-                .map(row -> CameraDistributionDto.builder()
-                        .cameraName(row[0].toString())
-                        .count(((Number) row[1]).longValue())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public PeriodSummaryDto getPeriodSummary(LocalDateTime startDate, LocalDateTime endDate) {
-        LocalDateTime start = (startDate != null) ? startDate : MIN_DATE;
-        LocalDateTime end = (endDate != null) ? endDate : MAX_DATE;
-
-        long totalEvents = eventRepository.countTotalEventsBetween(start, end);
-        long resolvedEvents = eventRepository.countResolvedEventsBetween(start, end);
-        List<String> topEventTypes = eventRepository.findTopEventTypeBetween(start, end);
-        long alerts = eventRepository.countAlertsBetween(start, end);
-
-        String topEventType = topEventTypes.isEmpty() ? "-" : EVENT_TYPE_NAME_MAP.getOrDefault(topEventTypes.get(0), topEventTypes.get(0));
-
-        return PeriodSummaryDto.builder()
-                .period(formatPeriod(start, end))
-                .totalEvents(totalEvents)
-                .resolvedEvents(resolvedEvents)
-                .topEventType(topEventType)
-                .alerts(alerts)
-                .build();
-    }
-
-    // 기간 포맷팅 헬퍼 메서드
-    private String formatPeriod(LocalDateTime startDate, LocalDateTime endDate) {
-        LocalDate start = startDate.toLocalDate();
-        LocalDate end = endDate.toLocalDate();
-
-        // 전체 기간인 경우 (MIN_DATE, MAX_DATE와 비교)
-        if (start.getYear() == 1970 && end.getYear() == 2100) {
-            return "전체 기간";
+        switch (timeRange) {
+            case "week":
+                startOfCurrentPeriod = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toLocalDate().atStartOfDay();
+                endOfCurrentPeriod = startOfCurrentPeriod.plusDays(7).minusNanos(1);
+                startOfPreviousPeriod = startOfCurrentPeriod.minusWeeks(1);
+                endOfPreviousPeriod = endOfCurrentPeriod.minusWeeks(1);
+                break;
+            case "month":
+                startOfCurrentPeriod = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+                endOfCurrentPeriod = now.with(TemporalAdjusters.lastDayOfMonth()).toLocalDate().atTime(LocalTime.MAX);
+                startOfPreviousPeriod = startOfCurrentPeriod.minusMonths(1);
+                endOfPreviousPeriod = endOfCurrentPeriod.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth()).toLocalDate().atTime(LocalTime.MAX);
+                break;
+            case "day":
+            default:
+                startOfCurrentPeriod = now.toLocalDate().atStartOfDay();
+                endOfCurrentPeriod = now.toLocalDate().atTime(LocalTime.MAX);
+                startOfPreviousPeriod = startOfCurrentPeriod.minusDays(1);
+                endOfPreviousPeriod = endOfCurrentPeriod.minusDays(1);
+                break;
         }
 
-        if (start.isEqual(end)) {
-            return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        } else if (start.getYear() == end.getYear() && start.getMonth() == end.getMonth()) {
-            return start.format(DateTimeFormatter.ofPattern("yyyy-MM"));
-        } else if (start.getYear() == end.getYear()) {
-            return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + " ~ " + end.format(DateTimeFormatter.ofPattern("MM-dd"));
-        } else {
-            return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + " ~ " + end.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        List<Event> currentEvents = findEventsBetween(startOfCurrentPeriod, endOfCurrentPeriod);
+        List<Event> previousEvents = findEventsBetween(startOfPreviousPeriod, endOfPreviousPeriod);
+
+        KpiData kpiData = buildKpiData(currentEvents, previousEvents, timeRange);
+        TrendData trendData = buildTrendData(currentEvents, timeRange, startOfCurrentPeriod);
+        DonutChartData donutChartData = buildDonutChartData(currentEvents);
+        HeatmapData heatmapData = buildHeatmapData(currentEvents, timeRange);
+        List<CameraRankData> topCameras = buildTopCamerasData(currentEvents);
+
+        return new StatisticsResponse(kpiData, trendData, donutChartData, heatmapData, topCameras);
+    }
+
+    private List<Event> findEventsBetween(LocalDateTime start, LocalDateTime end) {
+        Specification<Event> spec = (root, query, cb) -> {
+            Predicate predicate = cb.between(root.get("occurredAt"), start, end);
+            return predicate;
+        };
+        return eventRepository.findAll(spec);
+    }
+
+    private KpiData buildKpiData(List<Event> currentEvents, List<Event> previousEvents, String timeRange) {
+        long currentTotal = currentEvents.size();
+        long previousTotal = previousEvents.size();
+        long currentEmergency = currentEvents.stream().filter(e -> e.getRisk() == EventRisk.ABNORMAL || e.getRisk() == EventRisk.SUSPICIOUS).count();
+        long previousEmergency = previousEvents.stream().filter(e -> e.getRisk() == EventRisk.ABNORMAL || e.getRisk() == EventRisk.SUSPICIOUS).count();
+
+        List<Camera> allCameras = cameraRepository.findAll();
+        long totalCameras = allCameras.size();
+        long activeCameras = allCameras.stream().filter(Camera::isConnected).count();
+
+        return new KpiData(
+                String.format("%,d", currentTotal),
+                getTrendString(currentTotal, previousTotal, "건", timeRange),
+                currentTotal >= previousTotal,
+                String.format("%,d", currentEmergency),
+                getTrendString(currentEmergency, previousEmergency, "건", timeRange),
+                currentEmergency >= previousEmergency,
+                "99.8", // Mock
+                "변동 없음",
+                null,
+                String.valueOf(activeCameras),
+                "/ " + totalCameras + " 대",
+                activeCameras == totalCameras ? "모두 정상 작동중" : (totalCameras - activeCameras) + "대 확인 필요",
+                null
+        );
+    }
+
+    private String getTrendString(long current, long previous, String unit, String timeRange) {
+        long diff = current - previous;
+        if (diff == 0) return "변동 없음";
+
+        String periodStr = switch (timeRange) {
+            case "day" -> "전일";
+            case "week" -> "전주";
+            case "month" -> "전월";
+            default -> "이전";
+        };
+
+        return String.format("%s%d%s (%s 대비)", diff > 0 ? "+" : "", diff, unit, periodStr);
+    }
+
+    private TrendData buildTrendData(List<Event> events, String timeRange, LocalDateTime start) {
+        String title = "";
+        List<String> xAxis = new ArrayList<>();
+        List<Integer> series = new ArrayList<>();
+
+        switch (timeRange) {
+            case "day":
+                title = "시간대별 이벤트 추이";
+                xAxis = Arrays.asList("00시", "04시", "08시", "12시", "16시", "20시", "24시");
+                Map<Integer, Long> hourly = events.stream().collect(Collectors.groupingBy(e -> e.getOccurredAt().getHour(), Collectors.counting()));
+                series = IntStream.range(0, 24).map(h -> hourly.getOrDefault(h, 0L).intValue()).boxed().collect(Collectors.toList());
+                break;
+            case "week":
+                title = "요일별 이벤트 추이";
+                xAxis = Arrays.asList("월", "화", "수", "목", "금", "토", "일");
+                Map<DayOfWeek, Long> daily = events.stream().collect(Collectors.groupingBy(e -> e.getOccurredAt().getDayOfWeek(), Collectors.counting()));
+                series = Arrays.stream(DayOfWeek.values()).map(d -> daily.getOrDefault(d, 0L).intValue()).collect(Collectors.toList());
+                break;
+            case "month":
+                title = "일별 이벤트 추이";
+                int daysInMonth = start.toLocalDate().lengthOfMonth();
+                xAxis = IntStream.rangeClosed(1, daysInMonth).mapToObj(String::valueOf).collect(Collectors.toList());
+                Map<Integer, Long> monthly = events.stream().collect(Collectors.groupingBy(e -> e.getOccurredAt().getDayOfMonth(), Collectors.counting()));
+                series = IntStream.rangeClosed(1, daysInMonth).map(d -> monthly.getOrDefault(d, 0L).intValue()).boxed().collect(Collectors.toList());
+                break;
         }
+        return new TrendData(title, xAxis, series);
+    }
+
+    private DonutChartData buildDonutChartData(List<Event> events) {
+        if (events.isEmpty()) {
+            return new DonutChartData(new ArrayList<>());
+        }
+        Map<EventType, Long> typeCounts = events.stream()
+                .collect(Collectors.groupingBy(Event::getType, Collectors.counting()));
+
+        long total = events.size();
+
+        List<DonutChartItem> items = typeCounts.entrySet().stream()
+                .map(entry -> new DonutChartItem(
+                        entry.getKey().name(),
+                        entry.getValue().intValue(),
+                        (double) entry.getValue() * 100 / total
+                ))
+                .collect(Collectors.toList());
+
+        return new DonutChartData(items);
+    }
+
+    private HeatmapData buildHeatmapData(List<Event> events, String timeRange) {
+        String title = "";
+        List<String> yAxis = new ArrayList<>();
+        List<HeatmapPoint> series = new ArrayList<>();
+
+        switch (timeRange) {
+            case "day":
+                title = "구역/시간대별 집중도";
+                List<Camera> allCameras = cameraRepository.findAll();
+                yAxis = allCameras.stream().map(Camera::getLocation).distinct().collect(Collectors.toList());
+                Map<String, Integer> yAxisMap = IntStream.range(0, yAxis.size()).boxed().collect(Collectors.toMap(yAxis::get, Function.identity()));
+
+                Map<String, Map<Integer, Long>> locationHourly = events.stream()
+                        .collect(Collectors.groupingBy(e -> e.getCamera().getLocation(),
+                                Collectors.groupingBy(e -> e.getOccurredAt().getHour() / 6, Collectors.counting())));
+
+                series = locationHourly.entrySet().stream()
+                        .flatMap(entry -> entry.getValue().entrySet().stream()
+                                .map(innerEntry -> new HeatmapPoint(
+                                        innerEntry.getKey(),
+                                        yAxisMap.getOrDefault(entry.getKey(), -1),
+                                        innerEntry.getValue().intValue()
+                                )))
+                        .filter(p -> p.getY() != -1)
+                        .collect(Collectors.toList());
+                break;
+            case "week":
+            case "month":
+                title = "요일/시간대별 발생 패턴";
+                yAxis = Arrays.asList("월", "화", "수", "목", "금", "토", "일");
+                Map<DayOfWeek, Map<Integer, Long>> dayHourly = events.stream()
+                        .collect(Collectors.groupingBy(e -> e.getOccurredAt().getDayOfWeek(),
+                                Collectors.groupingBy(e -> e.getOccurredAt().getHour() / 6, Collectors.counting())));
+
+                series = dayHourly.entrySet().stream()
+                        .flatMap(entry -> entry.getValue().entrySet().stream()
+                                .map(innerEntry -> new HeatmapPoint(
+                                        innerEntry.getKey(),
+                                        entry.getKey().getValue() - 1, // DayOfWeek is 1-7
+                                        innerEntry.getValue().intValue()
+                                )))
+                        .collect(Collectors.toList());
+                break;
+        }
+        return new HeatmapData(title, yAxis, series);
+    }
+
+    private List<CameraRankData> buildTopCamerasData(List<Event> events) {
+        Map<Camera, Long> cameraCounts = events.stream()
+                .collect(Collectors.groupingBy(Event::getCamera, Collectors.counting()));
+
+        Map<Camera, Boolean> cameraAlerts = events.stream()
+                .filter(e -> e.getRisk() == EventRisk.ABNORMAL)
+                .collect(Collectors.toMap(Event::getCamera, v -> true, (v1, v2) -> v1));
+
+        List<CameraRankData> ranks = cameraCounts.entrySet().stream()
+                .sorted(Map.Entry.<Camera, Long>comparingByValue().reversed())
+                .limit(5)
+                .map(entry -> new CameraRankData(
+                        0, // Rank will be set below
+                        entry.getKey().getName() + " (" + entry.getKey().getLocation() + ")",
+                        entry.getValue().intValue(),
+                        cameraAlerts.getOrDefault(entry.getKey(), false)
+                ))
+                .collect(Collectors.toList());
+
+        IntStream.range(0, ranks.size()).forEach(i -> ranks.get(i).setRank(i + 1));
+        return ranks;
     }
 }

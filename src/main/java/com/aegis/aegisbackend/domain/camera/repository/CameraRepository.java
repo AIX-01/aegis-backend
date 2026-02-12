@@ -56,4 +56,3 @@ public interface CameraRepository extends JpaRepository<Camera, UUID> {
     @Query("SELECT c.name FROM Camera c")
     List<String> findAllCameraNames();
 }
-
