@@ -6,6 +6,7 @@ import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.event.repository.EventRepository;
 import com.aegis.aegisbackend.domain.stats.dto.*;
 import com.aegis.aegisbackend.global.common.enums.EventRisk;
+import com.aegis.aegisbackend.global.common.enums.EventStatus;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -83,11 +84,30 @@ public class StatsService {
     }
 
     private KpiData buildKpiData(List<Event> currentEvents, List<Event> previousEvents, String timeRange) {
+        // Total Events
         long currentTotal = currentEvents.size();
         long previousTotal = previousEvents.size();
+
+        // Emergency Alerts
         long currentEmergency = currentEvents.stream().filter(e -> e.getRisk() == EventRisk.ABNORMAL || e.getRisk() == EventRisk.SUSPICIOUS).count();
         long previousEmergency = previousEvents.stream().filter(e -> e.getRisk() == EventRisk.ABNORMAL || e.getRisk() == EventRisk.SUSPICIOUS).count();
 
+        // Analysis Completion Rate
+        long currentAnalyzed = currentEvents.stream().filter(e -> e.getStatus() == EventStatus.ANALYZED).count();
+        double currentRate = (currentTotal == 0) ? 100.0 : (double) currentAnalyzed * 100 / currentTotal;
+
+        long previousAnalyzed = previousEvents.stream().filter(e -> e.getStatus() == EventStatus.ANALYZED).count();
+        double previousRate = (previousEvents.size() == 0) ? 100.0 : (double) previousAnalyzed * 100 / previousEvents.size();
+        double rateDiff = currentRate - previousRate;
+
+        String rateTrend;
+        if (Math.abs(rateDiff) < 0.1) {
+            rateTrend = "변동 없음";
+        } else {
+            rateTrend = String.format("%s%.1f%%", rateDiff > 0 ? "+" : "", rateDiff);
+        }
+
+        // Monitoring Cameras
         List<Camera> allCameras = cameraRepository.findAll();
         long totalCameras = allCameras.size();
         long activeCameras = allCameras.stream().filter(Camera::getConnected).count();
@@ -99,9 +119,9 @@ public class StatsService {
                 String.format("%,d", currentEmergency),
                 getTrendString(currentEmergency, previousEmergency, "건", timeRange),
                 currentEmergency >= previousEmergency,
-                "99.8", // Mock
-                "변동 없음",
-                null,
+                String.format("%.1f", currentRate),
+                rateTrend,
+                rateDiff >= 0,
                 String.valueOf(activeCameras),
                 "/ " + totalCameras + " 대",
                 activeCameras == totalCameras ? "모두 정상 작동중" : (totalCameras - activeCameras) + "대 확인 필요",
