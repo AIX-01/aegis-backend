@@ -129,7 +129,7 @@ public class AgentWebhookController {
             eventRepository.save(event);
             log.info("이벤트 수정 완료: eventId={}", eventId);
 
-            notificationService.createAnalysisNotifications(event);
+            notificationService.createEventUpdateNotifications(event);
             sseEmitterService.broadcastEvent(EventDto.from(event));
 
             return ResponseEntity.ok(Map.of("eventId", eventId.toString()));
@@ -225,7 +225,8 @@ public class AgentWebhookController {
             EventAction savedAction = eventActionRepository.save(eventAction);
             log.info("이벤트 액션 생성 완료: actionId={}", savedAction.getId());
 
-            // SSE로 액션 생성 알림 (토스트 없이 모달만 업데이트)
+            // 알림 생성 및 SSE 전송
+            notificationService.createActionNotifications(event, request.getAction(), request.getDescription());
             sseEmitterService.broadcastActionUpdate(eventId, savedAction.getId());
 
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -253,7 +254,7 @@ public class AgentWebhookController {
         log.info("이벤트 액션 수정 요청: eventId={}, actionId={}", eventId, actionId);
 
         try {
-            eventRepository.findById(eventId)
+            Event event = eventRepository.findById(eventId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
 
             EventAction eventAction = eventActionRepository.findById(actionId)
@@ -270,7 +271,8 @@ public class AgentWebhookController {
             eventActionRepository.save(eventAction);
             log.info("이벤트 액션 수정 완료: actionId={}", actionId);
 
-            // SSE로 액션 수정 알림 (토스트 없이 모달만 업데이트)
+            // 알림 생성 및 SSE 전송
+            notificationService.createActionUpdateNotifications(event, request.getAction(), request.getDescription());
             sseEmitterService.broadcastActionUpdate(eventId, actionId);
 
             return ResponseEntity.ok(Map.of("actionId", actionId.toString()));

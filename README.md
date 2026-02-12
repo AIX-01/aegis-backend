@@ -137,7 +137,7 @@ src/main/java/com/aegis/aegisbackend/
 1. AI Agent → POST /internal/agent/events (1차 분석 결과)
    - Request: { cameraId, risk, type, occurredAt }
    - 이벤트 생성 (status=PROCESSING)
-   - 알림 생성 (NotificationService.createEventNotifications)
+   - 알림 생성 (risk 기반 타입: abnormal→ALERT, suspicious→WARNING, normal→INFO)
    - SSE 브로드캐스트 (event)
    - Response: { eventId }
 
@@ -155,22 +155,25 @@ src/main/java/com/aegis/aegisbackend/
 5. AI Agent → PATCH /internal/agent/events/{id} (2차 분석 결과)
    - Request: { risk, type, summary, report, status }
    - null이 아닌 필드만 업데이트
-   - 분석 완료 알림 생성
+   - 알림 생성 (수정된 risk 기반 타입)
    - SSE 브로드캐스트 (event)
 
 6. AI Agent → POST /internal/agent/events/{id}/actions (액션 기록)
    - Request: { action, description }
    - 액션 로그 저장
+   - 알림 생성 (이벤트 risk 기반 타입)
    - Response: { actionId }
 
 7. AI Agent → PATCH /internal/agent/events/{id}/actions/{actionId} (액션 수정)
    - Request: { userId (선택), action, description }
    - userId가 있으면 승인/거절 사용자 업데이트
+   - 알림 생성 (이벤트 risk 기반 타입)
    - Response: { actionId }
 
 8. AI Agent → POST /internal/agent/events/{id}/actions/{actionId}/pending (Human-in-the-Loop)
    - Request: (없음)
    - DeferredResult로 응답 홀딩
+   - 알림 생성 (이벤트 risk 기반 타입)
    - SSE "action-pending" 브로드캐스트
    - 사용자 승인/거부 시 응답 반환
    - Response: { userId, userName, userEmail, result }
@@ -250,6 +253,7 @@ AI Agent                         Spring                          Frontend
    - SseEmitter 생성 (타임아웃: 30분)
    - 사용자별 Map에 저장
    - "connect" 이벤트 전송
+   - 현재 pending 액션 목록 전송
 
 2. 이벤트 발생 시:
    - NotificationService: DB에 알림 저장
@@ -261,6 +265,9 @@ AI Agent                         Spring                          Frontend
    - event: 이벤트 생성/수정
    - event-deleted: 이벤트 삭제
    - member: 멤버 변경
+   - action-update: 액션 생성/수정 (모달 갱신)
+   - action-pending: 액션 승인 대기 (Human-in-the-Loop)
+   - action-resolved: 액션 승인/거부 완료
 
 4. 연결 종료/오류 시:
    - Map에서 Emitter 제거

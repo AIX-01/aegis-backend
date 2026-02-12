@@ -82,7 +82,7 @@ public class SseEmitterService {
     public void sendNotification(UUID userId, NotificationDto notification) {
         SseEmitter emitter = emitters.get(userId);
         if (emitter == null) {
-            log.debug("SSE 연결 없음: userId={}", userId);
+            log.info("SSE 연결 없음 - 알림 전송 불가: userId={}", userId);
             return;
         }
 
@@ -90,7 +90,7 @@ public class SseEmitterService {
             emitter.send(SseEmitter.event()
                     .name("notification")
                     .data(notification));
-            log.debug("SSE 알림 전송: userId={}, notificationId={}", userId, notification.getId());
+            log.info("SSE 알림 전송 성공: userId={}, title={}", userId, notification.getTitle());
         } catch (IOException e) {
             log.warn("SSE 알림 전송 실패: userId={}", userId);
             emitters.remove(userId);

@@ -5,6 +5,7 @@ import com.aegis.aegisbackend.domain.camera.entity.Camera;
 import com.aegis.aegisbackend.domain.event.entity.Event;
 import com.aegis.aegisbackend.domain.notification.entity.Notification;
 import com.aegis.aegisbackend.domain.user.entity.User;
+import com.aegis.aegisbackend.global.common.enums.EventRisk;
 import com.aegis.aegisbackend.global.common.enums.EventType;
 import com.aegis.aegisbackend.global.common.enums.NotificationType;
 import com.aegis.aegisbackend.global.common.enums.UserRole;
@@ -61,7 +62,7 @@ public class NotificationService {
                 .build();
 
         Notification saved = notificationRepository.save(notification);
-        log.debug("Notification created for user: {}", userId);
+        log.info("Notification created: userId={}, type={}, title={}", userId, type, title);
 
         // SSE로 실시간 알림 전송
         NotificationDto dto = toNotificationDto(saved);
@@ -87,52 +88,105 @@ public class NotificationService {
     }
 
     /**
-     * 이벤트 생성 시 알림 (ALERT)
+     * risk 기반 NotificationType 결정
+     * - abnormal: ALERT (빨강)
+     * - suspicious: WARNING (노랑)
+     * - normal: INFO (기본)
+     */
+    private NotificationType getNotificationTypeByRisk(EventRisk risk) {
+        return switch (risk) {
+            case ABNORMAL -> NotificationType.ALERT;
+            case SUSPICIOUS -> NotificationType.WARNING;
+            case NORMAL -> NotificationType.INFO;
+        };
+    }
+
+    /**
+     * 이벤트 생성 시 알림 (POST /events)
      */
     @Transactional
     public void createEventNotifications(Event event) {
         Camera camera = event.getCamera();
         List<User> users = getNotificationTargetUsers(camera.getId());
+        NotificationType type = getNotificationTypeByRisk(event.getRisk());
 
         String title = getEventTitle(event.getType());
         String message = String.format("[%s] %s 감지", camera.getLocation(), getEventTypeKorean(event.getType()));
 
         for (User user : users) {
-            createNotification(user.getId(), event.getId(), NotificationType.ALERT, title, message);
+            createNotification(user.getId(), event.getId(), type, title, message);
         }
-        log.info("이벤트 알림 생성 완료: eventId={}, users={}", event.getId(), users.size());
+        log.info("이벤트 알림 생성 완료: eventId={}, risk={}, users={}", event.getId(), event.getRisk(), users.size());
     }
 
     /**
-     * 분석 완료 시 알림 (WARNING)
+     * 이벤트 수정 시 알림 (PATCH /events)
      */
     @Transactional
-    public void createAnalysisNotifications(Event event) {
+    public void createEventUpdateNotifications(Event event) {
         Camera camera = event.getCamera();
         List<User> users = getNotificationTargetUsers(camera.getId());
+        NotificationType type = getNotificationTypeByRisk(event.getRisk());
 
         String title = "분석 완료";
         String message = String.format("[%s] 상세 분석이 완료되었습니다.", camera.getLocation());
 
         for (User user : users) {
-            createNotification(user.getId(), event.getId(), NotificationType.WARNING, title, message);
+            createNotification(user.getId(), event.getId(), type, title, message);
         }
-        log.info("분석 완료 알림 생성: eventId={}, users={}", event.getId(), users.size());
+        log.info("이벤트 수정 알림 생성: eventId={}, risk={}, users={}", event.getId(), event.getRisk(), users.size());
     }
 
     /**
-     * 액션 승인 요청 시 알림 (INFO)
+     * 액션 생성 시 알림 (POST /actions)
+     */
+    @Transactional
+    public void createActionNotifications(Event event, String action, String description) {
+        Camera camera = event.getCamera();
+        List<User> users = getNotificationTargetUsers(camera.getId());
+        NotificationType type = getNotificationTypeByRisk(event.getRisk());
+
+        String title = "액션 생성";
+        String message = String.format("[%s] %s", action, description);
+
+        for (User user : users) {
+            createNotification(user.getId(), event.getId(), type, title, message);
+        }
+        log.info("액션 생성 알림: eventId={}, action={}, users={}", event.getId(), action, users.size());
+    }
+
+    /**
+     * 액션 수정 시 알림 (PATCH /actions)
+     */
+    @Transactional
+    public void createActionUpdateNotifications(Event event, String action, String description) {
+        Camera camera = event.getCamera();
+        List<User> users = getNotificationTargetUsers(camera.getId());
+        NotificationType type = getNotificationTypeByRisk(event.getRisk());
+
+        String title = "액션 수정";
+        String message = String.format("[%s] %s", action, description);
+
+        for (User user : users) {
+            createNotification(user.getId(), event.getId(), type, title, message);
+        }
+        log.info("액션 수정 알림: eventId={}, action={}, users={}", event.getId(), action, users.size());
+    }
+
+    /**
+     * 액션 승인 요청 시 알림 (POST /pending)
      */
     @Transactional
     public void createPendingActionNotifications(Event event, String action, String description) {
         Camera camera = event.getCamera();
         List<User> users = getNotificationTargetUsers(camera.getId());
+        NotificationType type = getNotificationTypeByRisk(event.getRisk());
 
         String title = "승인 요청";
-        String message = String.format("%s: %s", action, description);
+        String message = String.format("[%s] %s", action, description);
 
         for (User user : users) {
-            createNotification(user.getId(), event.getId(), NotificationType.INFO, title, message);
+            createNotification(user.getId(), event.getId(), type, title, message);
         }
         log.info("승인 요청 알림 생성: eventId={}, action={}, users={}", event.getId(), action, users.size());
     }
