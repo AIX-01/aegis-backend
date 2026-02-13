@@ -14,18 +14,50 @@ import java.util.UUID;
 @Repository
 public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecificationExecutor<Event> {
 
+    // --- 새로운 통계 API용 쿼리 ---
+
+    // 기간 내 총 이벤트 수
+    @Query("SELECT COUNT(e) FROM Event e WHERE e.occurredAt BETWEEN :startDate AND :endDate")
+    long countTotalEventsBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 카메라별 이벤트 분포
+    @Query("SELECT e.camera.name, COUNT(e) FROM Event e WHERE e.occurredAt BETWEEN :startDate AND :endDate GROUP BY e.camera.name ORDER BY COUNT(e) DESC")
+    List<Object[]> countCameraDistributionBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 이벤트 유형별 분포
+    @Query("SELECT e.type, COUNT(e) FROM Event e WHERE e.occurredAt BETWEEN :startDate AND :endDate GROUP BY e.type")
+    List<Object[]> countEventTypeDistributionBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 일별 이벤트 추이 (PostgreSQL)
+    @Query(value = "SELECT DATE(e.occurred_at), COUNT(e), SUM(CASE WHEN e.status = 'ANALYZED' THEN 1 ELSE 0 END) " +
+                   "FROM events e WHERE e.occurred_at BETWEEN :startDate AND :endDate " +
+                   "GROUP BY DATE(e.occurred_at) ORDER BY DATE(e.occurred_at)", nativeQuery = true)
+    List<Object[]> findPeriodTrendBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 분석 완료된 이벤트 수
+    @Query("SELECT COUNT(e) FROM Event e WHERE e.status = 'ANALYZED' AND e.occurredAt BETWEEN :startDate AND :endDate")
+    long countResolvedEventsBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 가장 많이 발생한 이벤트 유형
+    @Query("SELECT e.type FROM Event e WHERE e.occurredAt BETWEEN :startDate AND :endDate GROUP BY e.type ORDER BY COUNT(e) DESC")
+    List<String> findTopEventTypeBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // 기간 내 긴급 알림 수 (위험도: ABNORMAL, SUSPICIOUS)
+    @Query("SELECT COUNT(e) FROM Event e WHERE e.risk IN ('ABNORMAL', 'SUSPICIOUS') AND e.occurredAt BETWEEN :startDate AND :endDate")
+    long countAlertsBetween(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+
+    // --- 기존 통계 API용 쿼리 (삭제 예정) ---
+
     @Query("SELECT e.type, COUNT(e) FROM Event e GROUP BY e.type")
     List<Object[]> countByEventType();
 
-    // PostgreSQL: DATE(occurred_at)로 날짜별 집계
     @Query(value = "SELECT DATE(occurred_at) as date, COUNT(*) FROM events WHERE occurred_at >= :startDate GROUP BY DATE(occurred_at)", nativeQuery = true)
     List<Object[]> countByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    // PostgreSQL: 날짜별 심각 이벤트(ASSAULT, BURGLARY) 집계
     @Query(value = "SELECT DATE(occurred_at) as date, COUNT(*) FROM events WHERE occurred_at >= :startDate AND type IN ('ASSAULT', 'BURGLARY') GROUP BY DATE(occurred_at)", nativeQuery = true)
     List<Object[]> countAlertsByDateSince(@Param("startDate") LocalDateTime startDate);
 
-    // PostgreSQL: EXTRACT(DOW FROM ...)로 요일별 집계 (0=일요일, 6=토요일)
     @Query(value = "SELECT EXTRACT(DOW FROM occurred_at) as day_of_week, COUNT(*), SUM(CASE WHEN status = 'ANALYZED' THEN 1 ELSE 0 END) FROM events WHERE occurred_at >= :startDate GROUP BY EXTRACT(DOW FROM occurred_at)", nativeQuery = true)
     List<Object[]> countByDayOfWeekSince(@Param("startDate") LocalDateTime startDate);
 }
